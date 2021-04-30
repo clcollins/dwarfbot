@@ -53,12 +53,12 @@ var rootCmd = &cobra.Command{
 		port := viper.GetString("port")
 		verbose := viper.GetBool("verbose")
 
-		clientSecret := viper.GetString("clientSecret")
+		token := viper.GetString("token")
 
 		bot := dwarfbot.DwarfBot{
 			Credentials: &dwarfbot.OAuthCreds{
-				Name:         name,
-				ClientSecret: clientSecret,
+				Name:  name,
+				Token: token,
 			},
 			Verbose: verbose,
 			Server:  server,

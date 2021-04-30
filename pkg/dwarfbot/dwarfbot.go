@@ -2,19 +2,34 @@ package dwarfbot
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/textproto"
+	"regexp"
+	"strings"
 	"time"
 )
+
+// Regex for parsing PRIVMSG strings.
+//
+// First matched group is the user's name and the second matched group is the content of the
+// user's message.
+var msgRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG) #\w+(?: :(.*))?$`)
+
+// Regex for parsing user commands, from already parsed PRIVMSG strings.
+//
+// First matched group is the command name and the second matched group is the argument for the
+// command.
+var cmdRegex *regexp.Regexp = regexp.MustCompile(`^!(\w+)\s?(\w+)?`)
 
 type OAuthCreds struct {
 	// Client ID
 	Name string `json:"name,omitempty"`
 
 	// Client Secret
-	ClientSecret string `json:"client_secret,omitempty"`
+	Token string `json:"token,omitempty"`
 }
 
 type Bot interface {
@@ -71,6 +86,8 @@ func (db *DwarfBot) Start() {
 
 		db.Connect()
 		db.JoinChannel()
+		defer db.PartChannel()
+
 		err = db.HandleChat()
 		if err != nil {
 			log.Println(err)
@@ -111,11 +128,18 @@ func (db *DwarfBot) Disconnect() {
 
 // JoinChannel joins a specific IRC Channel
 func (db *DwarfBot) JoinChannel() {
-	db.conn.Write([]byte("PASS oauth: " + db.Credentials.ClientSecret + "\r\n"))
+	db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n"))
 	db.conn.Write([]byte("NICK " + db.Name + "\r\n"))
-	db.conn.Write([]byte("JOIN #" + db.Channel + "\r\n"))
+
+	// Channel login must be lowercase (https://dev.twitch.tv/docs/irc/guide#syntax-notes)
+	db.conn.Write([]byte("JOIN #" + strings.ToLower(db.Channel) + "\r\n"))
 
 	log.Printf("Joined channel #%s as @%s", db.Channel, db.Name)
+}
+
+func (db *DwarfBot) PartChannel() {
+	db.conn.Write([]byte("PART #" + strings.ToLower(db.Channel) + "\r\n"))
+	log.Printf("Parted from channel #%s", db.Channel)
 }
 
 // HandleChat is the main loop, listenting to incoming chat and responding
@@ -127,11 +151,106 @@ func (db *DwarfBot) HandleChat() error {
 		if err != nil {
 			db.Disconnect()
 
-			return err
+			var errMsg string
+			if db.Verbose {
+				errMsg = fmt.Sprintf("(%s)", err)
+			}
+
+			return errors.New(fmt.Sprintf("Failed to read line from channel, disconnecting %s", errMsg))
 		}
 
 		if db.Verbose {
-			fmt.Println(line)
+			log.Println(line)
+		}
+
+		if "PING :tmi.twitch.tv" == line {
+
+			// Must reply to PING messages with PONG message to stay connected
+			pong := "PONG :tmi.twitch.tv\r\n"
+			db.conn.Write([]byte(pong))
+			log.Print(pong)
+			continue
+
+		} else {
+
+			// handle a PRIVMSG message
+			matches := msgRegex.FindStringSubmatch(line)
+			if matches != nil {
+				userName := matches[1]
+				msgType := matches[2]
+
+				if db.Verbose {
+					log.Printf("User: %s, Message Type: %s", userName, msgType)
+				}
+
+				switch msgType {
+				case "PRIVMSG":
+					msg := matches[3]
+					log.Printf("%s: %s", userName, msg)
+
+					cmdMatches := cmdRegex.FindStringSubmatch(msg)
+					if cmdMatches != nil {
+						id, cmd, arguments := cmdMatches[1], cmdMatches[2], cmdMatches[3:]
+						parseCommand(db, id, cmd, arguments)
+						if err != nil {
+							return err
+						}
+					}
+				default:
+					// do nothing
+				}
+			}
 		}
 	}
+}
+
+// Makes the bot send a message to the chat channel.
+func (db *DwarfBot) Say(msg string) error {
+	if msg == "" {
+		return errors.New("msg was empty")
+	}
+
+	retVal, err := db.conn.Write([]byte(fmt.Sprintf("PRIVMSG #%s :%s\r\n", db.Channel, msg)))
+	log.Printf("%s (%d)", msg, retVal)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func parseCommand(db *DwarfBot, id string, cmd string, arguments []string) error {
+	var err error
+	aliases := []string{"hammerdwarfbot", "dwarfbot"}
+
+	// Ignore the command if it's not directed at this bot
+	if !contains(id, aliases) {
+		return nil
+	}
+
+	switch strings.ToLower(cmd) {
+	case "ping":
+		ping(db, arguments)
+	}
+
+	return err
+}
+
+func ping(db *DwarfBot, arguments []string) error {
+	if len(arguments) > 0 && contains("heyo", arguments) {
+		db.Say("Heyo, yourself, boy-o!")
+	}
+
+	db.Say("Ach! I dunnae own 'n Atari, but nevertheless, \"Pong\"!")
+	return nil
+}
+
+func contains(item string, list []string) bool {
+	for _, x := range list {
+		if x == item {
+			return true
+		}
+	}
+	return false
 }

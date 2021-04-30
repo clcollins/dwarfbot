@@ -3,6 +3,7 @@ module dwarfbot
 go 1.15
 
 require (
+	github.com/containerd/containerd v1.4.4
 	github.com/fatih/color v1.7.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect

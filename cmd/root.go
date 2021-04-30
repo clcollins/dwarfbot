@@ -113,8 +113,10 @@ func initConfig() {
 		home, err := homedir.Dir()
 		cobra.CheckErr(err)
 
-		// Search config in home directory with name ".dwarfbot" (without extension).
+		// Search config in home directory with name ".dwarfbot.yaml" (with extension).
+		// Note, Viper appends the .yaml when searching
 		viper.AddConfigPath(home)
+		viper.SetConfigType("yaml")
 		viper.SetConfigName(".dwarfbot")
 	}
 

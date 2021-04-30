@@ -18,6 +18,7 @@ package cmd
 import (
 	"dwarfbot/pkg/dwarfbot"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -46,15 +47,26 @@ var rootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
-		server, _ := cmd.Flags().GetString("server")
-		port, _ := cmd.Flags().GetString("port")
-		verbose, _ := cmd.Flags().GetBool("verbose")
+		name := viper.GetString("name")
+		channel := viper.GetString("channel")
+		server := viper.GetString("server")
+		port := viper.GetString("port")
+		verbose := viper.GetBool("verbose")
+
+		clientSecret := viper.GetString("clientSecret")
 
 		bot := dwarfbot.DwarfBot{
+			Credentials: &dwarfbot.OAuthCreds{
+				Name:         name,
+				ClientSecret: clientSecret,
+			},
 			Verbose: verbose,
 			Server:  server,
 			Port:    port,
+			Channel: channel,
+			Name:    name,
 		}
+
 		bot.Start()
 	},
 }
@@ -71,17 +83,24 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.dwarfbot.yaml)")
 
 	// Configure the server to connect to
-	rootCmd.Flags().StringP("server", "s", twitchChatServer, fmt.Sprintf("server to connect to (default: %s)", twitchChatServer))
+	rootCmd.PersistentFlags().StringP("server", "s", twitchChatServer, fmt.Sprintf("server to connect to (default: %s)", twitchChatServer))
+	viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
 
 	// Configure the port to use for the connection
-	rootCmd.Flags().StringP("port", "p", twitchChatPort, fmt.Sprintf("port to connect to (default: %s)", twitchChatPort))
+	rootCmd.PersistentFlags().StringP("port", "p", twitchChatPort, fmt.Sprintf("port to connect to (default: %s)", twitchChatPort))
+	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 
 	// Configure the port to use for the connection
-	rootCmd.Flags().StringP("channel", "c", "", "channel to participate in (required)")
-	rootCmd.MarkFlagRequired("channel")
+	rootCmd.PersistentFlags().StringP("channel", "c", "", "channel to participate in (required)")
+	viper.BindPFlag("channel", rootCmd.PersistentFlags().Lookup("channel"))
 
 	// Enable verbose logging to stdout
-	rootCmd.Flags().BoolP("verbose", "v", false, "enable verbose logging")
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")
+	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+
+	// IRC Nick to connect with
+	rootCmd.PersistentFlags().StringP("name", "n", "", "IRC Nick to connect as")
+	viper.BindPFlag("name", rootCmd.PersistentFlags().Lookup("name"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -104,5 +123,7 @@ func initConfig() {
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	} else {
+		log.Fatalf(err.Error())
 	}
 }

@@ -1,14 +1,17 @@
 package dwarfbot
 
 import (
+	"bufio"
+	"fmt"
 	"log"
 	"net"
+	"net/textproto"
 	"time"
 )
 
 type OAuthCreds struct {
 	// Client ID
-	ClientID string `json:"client_id,omitempty"`
+	Name string `json:"name,omitempty"`
 
 	// Client Secret
 	ClientSecret string `json:"client_secret,omitempty"`
@@ -33,7 +36,7 @@ type DwarfBot struct {
 	conn net.Conn
 
 	// OAuth credential for authentication
-	Credentails *OAuthCreds
+	Credentials *OAuthCreds
 
 	// Rate-limit bot messages. 20/30 millisecond is OK
 	MsgRate time.Duration
@@ -103,23 +106,32 @@ func (db *DwarfBot) Connect() {
 
 func (db *DwarfBot) Disconnect() {
 	db.conn.Close()
-	log.Printf("Connection closed; elapsed time %g", (time.Now().Sub(db.startTime).Seconds()))
+	log.Printf("Connection closed; elapsed time %g", (time.Since(db.startTime).Seconds()))
 }
 
 // JoinChannel joins a specific IRC Channel
 func (db *DwarfBot) JoinChannel() {
+	db.conn.Write([]byte("PASS oauth: " + db.Credentials.ClientSecret + "\r\n"))
+	db.conn.Write([]byte("NICK " + db.Name + "\r\n"))
+	db.conn.Write([]byte("JOIN #" + db.Channel + "\r\n"))
 
+	log.Printf("Joined channel #%s as @%s", db.Channel, db.Name)
 }
 
 // HandleChat is the main loop, listenting to incoming chat and responding
 func (db *DwarfBot) HandleChat() error {
-	var err error
+	tp := textproto.NewReader(bufio.NewReader(db.conn))
 
-	log.Printf("Awaiting chat messages, zzz")
 	for {
-		time.Sleep(5 * time.Second)
-		log.Printf("Still awaiting chat messages, zzz")
-	}
+		line, err := tp.ReadLine()
+		if err != nil {
+			db.Disconnect()
 
-	return err
+			return err
+		}
+
+		if db.Verbose {
+			fmt.Println(line)
+		}
+	}
 }

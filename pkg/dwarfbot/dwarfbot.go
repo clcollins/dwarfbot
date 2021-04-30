@@ -12,6 +12,9 @@ import (
 	"time"
 )
 
+// Bot aliases
+var aliases = []string{"hammerdwarfbot", "dwarfbot"}
+
 // Regex for parsing PRIVMSG strings.
 //
 // First matched group is the user's name and the second matched group is the content of the
@@ -22,7 +25,7 @@ var msgRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.
 //
 // First matched group is the command name and the second matched group is the argument for the
 // command.
-var cmdRegex *regexp.Regexp = regexp.MustCompile(`^!(\w+)\s?(\w+)?`)
+var cmdRegex *regexp.Regexp = regexp.MustCompile(`^!(\w+)\s?(\w+)\s?(.+)?`)
 
 type OAuthCreds struct {
 	// Client ID
@@ -190,8 +193,16 @@ func (db *DwarfBot) HandleChat() error {
 
 					cmdMatches := cmdRegex.FindStringSubmatch(msg)
 					if cmdMatches != nil {
-						id, cmd, arguments := cmdMatches[1], cmdMatches[2], cmdMatches[3:]
-						parseCommand(db, id, cmd, arguments)
+						botId, cmd := strings.ToLower(cmdMatches[1]), strings.ToLower(cmdMatches[2])
+						// Split the third match into a slice on whitespace for arguments
+						arguments := strings.Fields(cmdMatches[3])
+
+						// Ignore the command if it's not directed at this bot
+						if !contains(aliases, botId) {
+							break
+						}
+
+						parseCommand(db, userName, cmd, arguments)
 						if err != nil {
 							return err
 						}
@@ -210,8 +221,8 @@ func (db *DwarfBot) Say(msg string) error {
 		return errors.New("msg was empty")
 	}
 
-	retVal, err := db.conn.Write([]byte(fmt.Sprintf("PRIVMSG #%s :%s\r\n", db.Channel, msg)))
-	log.Printf("%s (%d)", msg, retVal)
+	_, err := db.conn.Write([]byte(fmt.Sprintf("PRIVMSG #%s :%s\r\n", db.Channel, msg)))
+	log.Printf("%s: %s", db.Name, msg)
 
 	if err != nil {
 		return err
@@ -220,16 +231,27 @@ func (db *DwarfBot) Say(msg string) error {
 	return nil
 }
 
-func parseCommand(db *DwarfBot, id string, cmd string, arguments []string) error {
+func parseAdminCommand(db *DwarfBot, cmd string, arguments []string) error {
 	var err error
-	aliases := []string{"hammerdwarfbot", "dwarfbot"}
 
-	// Ignore the command if it's not directed at this bot
-	if !contains(id, aliases) {
+	switch cmd {
+	case "shutdown":
+		db.Say("Yah, boss! Shuttin' 'er doon!")
+		db.Disconnect()
 		return nil
 	}
+	return err
+}
 
-	switch strings.ToLower(cmd) {
+func parseCommand(db *DwarfBot, userName string, cmd string, arguments []string) error {
+	var err error
+
+	if userName == db.Channel {
+		log.Printf("Received orders from the boss...")
+		parseAdminCommand(db, cmd, arguments)
+	}
+
+	switch cmd {
 	case "ping":
 		ping(db, arguments)
 	}
@@ -238,15 +260,30 @@ func parseCommand(db *DwarfBot, id string, cmd string, arguments []string) error
 }
 
 func ping(db *DwarfBot, arguments []string) error {
-	if len(arguments) > 0 && contains("heyo", arguments) {
-		db.Say("Heyo, yourself, boy-o!")
+	re := regexp.MustCompile(`(?i)heyo.+`)
+
+	switch {
+	case contains(arguments, strings.ToLower("heyo")):
+		db.Say("Heyo, yourself boy-o!")
+	case reContains(arguments, re):
+		db.Say("Heyo, yourself boy-o!")
+	default:
+		db.Say("Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
 	}
 
-	db.Say("Ach! I dunnae own 'n Atari, but nevertheless, \"Pong\"!")
 	return nil
 }
 
-func contains(item string, list []string) bool {
+func reContains(list []string, re *regexp.Regexp) bool {
+	for _, x := range list {
+		if re.MatchString(x) {
+			return true
+		}
+	}
+	return false
+}
+
+func contains(list []string, item string) bool {
 	for _, x := range list {
 		if x == item {
 			return true

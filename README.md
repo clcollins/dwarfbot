@@ -12,7 +12,7 @@ The cheerful sidekick from [https://twitch.tv/hammerdwarf](https://twitch.tv/ham
 
 MIT License
 
-Copyright (c) 2017 Forest Hoffman
+Copyright (c) 2021 Chris Collins
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

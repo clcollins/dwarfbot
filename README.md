@@ -1,6 +1,6 @@
 # dwarfbot
 
-The cheerful sidekick from https://twitch.tv/hammerdwarf, and Co.
+The cheerful sidekick from [https://twitch.tv/hammerdwarf](https://twitch.tv/hammerdwarf), and Co.
 
 ## Acknowledgements
 
@@ -31,4 +31,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-

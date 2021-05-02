@@ -41,9 +41,9 @@ var aliases = []string{"hammerdwarfbot", "dwarfbot"}
 
 // Regex for parsing PRIVMSG strings.
 //
-// First matched group is the user's name and the second matched group is the content of the
-// user's message.
-var msgRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG) #\w+(?: :(.*))?$`)
+// First matched group is the user's name, the second matched is the message type (PRIVMSG),
+// the third group is the incomming channel, and the fourth is the content of the user's message.
+var msgRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG) #(\w+)(?: :(.*))?$`)
 
 // Regex for parsing user commands, from already parsed PRIVMSG strings.
 //
@@ -115,8 +115,12 @@ func (db *DwarfBot) Start() {
 		}
 
 		db.Connect()
-		db.JoinChannel()
-		defer db.PartChannel()
+		db.Authenticate()
+		db.JoinChannel(db.Channel)
+		defer db.PartChannel(db.Channel)
+
+		db.JoinChannel("hammerdwarfbot")
+		defer db.PartChannel("hammerdwarfbot")
 
 		err = db.HandleChat()
 		if err != nil {
@@ -156,20 +160,30 @@ func (db *DwarfBot) Disconnect() {
 	log.Printf("Connection closed; elapsed time %g", (time.Since(db.startTime).Seconds()))
 }
 
-// JoinChannel joins a specific IRC Channel
-func (db *DwarfBot) JoinChannel() {
+func (db *DwarfBot) Authenticate() {
 	db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n"))
 	db.conn.Write([]byte("NICK " + db.Name + "\r\n"))
-
-	// Channel login must be lowercase (https://dev.twitch.tv/docs/irc/guide#syntax-notes)
-	db.conn.Write([]byte("JOIN #" + strings.ToLower(db.Channel) + "\r\n"))
-
-	log.Printf("Joined channel #%s as @%s", db.Channel, db.Name)
 }
 
-func (db *DwarfBot) PartChannel() {
-	db.conn.Write([]byte("PART #" + strings.ToLower(db.Channel) + "\r\n"))
-	log.Printf("Parted from channel #%s", db.Channel)
+// JoinChannel joins a specific IRC Channel
+func (db *DwarfBot) JoinChannel(channel string) {
+	if channel == "" {
+		return
+	}
+
+	// Channel login must be lowercase (https://dev.twitch.tv/docs/irc/guide#syntax-notes)
+	db.conn.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
+
+	log.Printf("Joined channel #%s as @%s", channel, db.Name)
+}
+
+func (db *DwarfBot) PartChannel(channel string) {
+	if channel == "" {
+		return
+	}
+
+	db.conn.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n"))
+	log.Printf("Parted from channel #%s", channel)
 }
 
 // Handle shutdown for good commands
@@ -213,15 +227,16 @@ func (db *DwarfBot) HandleChat() error {
 			if matches != nil {
 				userName := matches[1]
 				msgType := matches[2]
+				channelName := matches[3]
 
 				if db.Verbose {
-					log.Printf("User: %s, Message Type: %s", userName, msgType)
+					log.Printf("User: %s, Channel: %s, Message Type: %s", userName, channelName, msgType)
 				}
 
 				switch msgType {
 				case "PRIVMSG":
-					msg := matches[3]
-					log.Printf("%s: %s", userName, msg)
+					msg := matches[4]
+					log.Printf("%s #%s: %s", userName, channelName, msg)
 
 					cmdMatches := cmdRegex.FindStringSubmatch(msg)
 					if cmdMatches != nil {
@@ -234,7 +249,7 @@ func (db *DwarfBot) HandleChat() error {
 							break
 						}
 
-						parseCommand(db, userName, cmd, arguments)
+						parseCommand(db, channelName, userName, cmd, arguments)
 						if err != nil {
 							return err
 						}
@@ -248,13 +263,13 @@ func (db *DwarfBot) HandleChat() error {
 }
 
 // Makes the bot send a message to the chat channel.
-func (db *DwarfBot) Say(msg string) error {
+func (db *DwarfBot) Say(channelName, msg string) error {
 	if msg == "" {
 		return errors.New("msg was empty")
 	}
 
-	_, err := db.conn.Write([]byte(fmt.Sprintf("PRIVMSG #%s :%s\r\n", db.Channel, msg)))
-	log.Printf("%s: %s", db.Name, msg)
+	_, err := db.conn.Write([]byte(fmt.Sprintf("PRIVMSG #%s :%s\r\n", channelName, msg)))
+	log.Printf("%s #%s: %s", db.Name, channelName, msg)
 
 	if err != nil {
 		return err

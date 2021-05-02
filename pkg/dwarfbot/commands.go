@@ -30,12 +30,12 @@ import (
 	"strings"
 )
 
-func parseAdminCommand(db *DwarfBot, cmd string, arguments []string) error {
+func parseAdminCommand(db *DwarfBot, channelName string, cmd string, arguments []string) error {
 	var err error
 
 	switch cmd {
 	case "shutdown":
-		db.Say("Yah, boss! Shuttin' 'er doon!")
+		db.Say(channelName, "Yah, boss! Shuttin' 'er doon!")
 		db.Disconnect()
 		db.Die(0)
 		return nil
@@ -43,32 +43,32 @@ func parseAdminCommand(db *DwarfBot, cmd string, arguments []string) error {
 	return err
 }
 
-func parseCommand(db *DwarfBot, userName string, cmd string, arguments []string) error {
+func parseCommand(db *DwarfBot, channelName string, userName string, cmd string, arguments []string) error {
 	var err error
 
-	if userName == db.Channel {
+	if userName == channelName {
 		log.Printf("Received orders from the boss...")
-		parseAdminCommand(db, cmd, arguments)
+		parseAdminCommand(db, channelName, cmd, arguments)
 	}
 
 	switch cmd {
 	case "ping":
-		ping(db, arguments)
+		ping(db, channelName, arguments)
 	}
 
 	return err
 }
 
-func ping(db *DwarfBot, arguments []string) error {
+func ping(db *DwarfBot, channelName string, arguments []string) error {
 	re := regexp.MustCompile(`(?i)heyo.+`)
 
 	switch {
 	case contains(arguments, strings.ToLower("heyo")):
-		db.Say("Heyo, yourself boy-o!")
+		db.Say(channelName, "Heyo, yourself boy-o!")
 	case reContains(arguments, re):
-		db.Say("Heyo, yourself boy-o!")
+		db.Say(channelName, "Heyo, yourself boy-o!")
 	default:
-		db.Say("Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
+		db.Say(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
 	}
 
 	return nil

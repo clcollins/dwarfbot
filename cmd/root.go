@@ -56,7 +56,7 @@ var rootCmd = &cobra.Command{
 	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		name := viper.GetString("name")
-		channel := viper.GetString("channel")
+		channels := viper.GetStringSlice("channels")
 		server := viper.GetString("server")
 		port := viper.GetString("port")
 		verbose := viper.GetBool("verbose")
@@ -68,11 +68,11 @@ var rootCmd = &cobra.Command{
 				Name:  name,
 				Token: token,
 			},
-			Verbose: verbose,
-			Server:  server,
-			Port:    port,
-			Channel: channel,
-			Name:    name,
+			Verbose:  verbose,
+			Server:   server,
+			Port:     port,
+			Channels: channels,
+			Name:     name,
 		}
 
 		bot.Start()
@@ -99,8 +99,8 @@ func init() {
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 
 	// Configure the port to use for the connection
-	rootCmd.PersistentFlags().StringP("channel", "c", "", "channel to participate in (required)")
-	viper.BindPFlag("channel", rootCmd.PersistentFlags().Lookup("channel"))
+	rootCmd.PersistentFlags().StringP("channels", "c", "", "channels to participate in (required, []string)")
+	viper.BindPFlag("channels", rootCmd.PersistentFlags().Lookup("channels"))
 
 	// Enable verbose logging to stdout
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")

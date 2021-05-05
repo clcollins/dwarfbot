@@ -25,6 +25,7 @@ SOFTWARE.
 package dwarfbot
 
 import (
+	"fmt"
 	"log"
 	"regexp"
 	"strings"
@@ -54,6 +55,8 @@ func parseCommand(db *DwarfBot, channelName string, userName string, cmd string,
 	switch cmd {
 	case "ping":
 		ping(db, channelName, arguments)
+	case "channels":
+		channels(db, channelName, arguments)
 	}
 
 	return err
@@ -90,4 +93,13 @@ func contains(list []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func channels(db *DwarfBot, channelName string, arguments []string) error {
+	msg := fmt.Sprintf("Aye, I like ta hang about here: %s", db.Name)
+	for _, channel := range db.Channels {
+		msg = msg + fmt.Sprintf(" %s", channel)
+	}
+	db.Say(channelName, msg)
+	return nil
 }

@@ -75,7 +75,7 @@ type Bot interface {
 
 type DwarfBot struct {
 	// Channel to join, must be lowercase
-	Channel string
+	Channels []string
 
 	// Reference to the bot's connection to the server
 	conn net.Conn
@@ -116,11 +116,17 @@ func (db *DwarfBot) Start() {
 
 		db.Connect()
 		db.Authenticate()
-		db.JoinChannel(db.Channel)
-		defer db.PartChannel(db.Channel)
 
-		db.JoinChannel("hammerdwarfbot")
-		defer db.PartChannel("hammerdwarfbot")
+		// Join the bot's channel
+		db.JoinChannel(db.Name)
+
+		// Join secondary channels
+		for _, channel := range db.Channels {
+			db.JoinChannel(channel)
+			defer db.PartChannel(channel)
+		}
+
+		defer db.PartChannel(db.Name)
 
 		err = db.HandleChat()
 		if err != nil {

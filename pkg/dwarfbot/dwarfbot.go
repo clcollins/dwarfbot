@@ -32,6 +32,7 @@ import (
 	"net/textproto"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -42,7 +43,7 @@ var aliases = []string{"hammerdwarfbot", "dwarfbot"}
 // Regex for parsing PRIVMSG strings.
 //
 // First matched group is the user's name, the second matched is the message type (PRIVMSG),
-// the third group is the incomming channel, and the fourth is the content of the user's message.
+// the third group is the incoming channel, and the fourth is the content of the user's message.
 var msgRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG) #(\w+)(?: :(.*))?$`)
 
 // Regex for parsing user commands, from already parsed PRIVMSG strings.
@@ -117,16 +118,11 @@ func (db *DwarfBot) Start() {
 		db.Connect()
 		db.Authenticate()
 
-		// Join the bot's channel
-		db.JoinChannel(db.Name)
-
-		// Join secondary channels
-		for _, channel := range db.Channels {
+		// Join the channels specified by config or CLI args
+		for _, channel := range deduplicateChannels(db.Channels) {
 			db.JoinChannel(channel)
 			defer db.PartChannel(channel)
 		}
-
-		defer db.PartChannel(db.Name)
 
 		err = db.HandleChat()
 		if err != nil {
@@ -197,7 +193,7 @@ func (db *DwarfBot) Die(exitCode int) {
 	os.Exit(exitCode)
 }
 
-// HandleChat is the main loop, listenting to incoming chat and responding
+// HandleChat is the main loop, listening to incoming chat and responding
 func (db *DwarfBot) HandleChat() error {
 	tp := textproto.NewReader(bufio.NewReader(db.conn))
 
@@ -282,4 +278,22 @@ func (db *DwarfBot) Say(channelName, msg string) error {
 	}
 
 	return nil
+}
+
+// func deduplicateChannels will remove duplicate strings
+// from the channels slice, and return a new slice, sorted
+// alphabetically.
+func deduplicateChannels(channels []string) []string {
+	// Deduplicate channels
+	found := make(map[string]bool)
+	unique := []string{}
+	for _, channel := range channels {
+		if !found[channel] {
+			unique = append(unique, channel)
+			found[channel] = true
+		}
+		sort.Sort(sort.StringSlice(unique))
+	}
+
+	return unique
 }

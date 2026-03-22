@@ -100,6 +100,10 @@ type DwarfBot struct {
 
 	// Verbose output
 	Verbose bool
+
+	// exitFunc is called by Die() to exit the process.
+	// Defaults to os.Exit if nil.
+	exitFunc func(int)
 }
 
 func (db *DwarfBot) Start() {
@@ -194,6 +198,10 @@ func (db *DwarfBot) PartChannel(channel string) {
 
 // Handle shutdown for good commands
 func (db *DwarfBot) Die(exitCode int) {
+	if db.exitFunc != nil {
+		db.exitFunc(exitCode)
+		return
+	}
 	os.Exit(exitCode)
 }
 

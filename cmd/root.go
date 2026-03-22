@@ -28,6 +28,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -50,32 +52,71 @@ var rootCmd = &cobra.Command{
 	Use:   "dwarfbot",
 	Short: "A bot to assist with https://twitch.tv/hammerdwarf and Co.",
 	Long: `Dwarfbot is a bot to assist with the Twitch channel for
-	https://twitch.tv/hammerdwarf and related media, social and not.`,
+	https://twitch.tv/hammerdwarf and related media, social and not.
+	Supports both Twitch IRC and Discord channels.`,
 
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
 	Run: func(cmd *cobra.Command, args []string) {
 		name := viper.GetString("name")
-		channels := viper.GetStringSlice("channels")
-		server := viper.GetString("server")
-		port := viper.GetString("port")
 		verbose := viper.GetBool("verbose")
 
-		token := viper.GetString("token")
+		// Twitch config
+		twitchToken := viper.GetString("token")
+		twitchChannels := viper.GetStringSlice("channels")
+		server := viper.GetString("server")
+		port := viper.GetString("port")
 
-		bot := dwarfbot.DwarfBot{
-			Credentials: &dwarfbot.OAuthCreds{
-				Name:  name,
-				Token: token,
-			},
-			Verbose:  verbose,
-			Server:   server,
-			Port:     port,
-			Channels: channels,
-			Name:     name,
+		// Discord config
+		discordToken := viper.GetString("discord_token")
+		discordChannels := viper.GetStringSlice("discord_channels")
+		discordAdminRole := viper.GetString("discord_admin_role")
+
+		twitchEnabled := twitchToken != "" && len(twitchChannels) > 0
+		discordEnabled := discordToken != ""
+
+		if !twitchEnabled && !discordEnabled {
+			log.Fatal("At least one platform must be configured (Twitch: token + channels, Discord: discord_token)")
 		}
 
-		bot.Start()
+		// Start Discord bot if configured
+		var discordBot *dwarfbot.DiscordBot
+		if discordEnabled {
+			discordBot = &dwarfbot.DiscordBot{
+				Token:      discordToken,
+				ChannelIDs: discordChannels,
+				AdminRole:  discordAdminRole,
+				Name:       name,
+			}
+
+			if err := discordBot.Start(); err != nil {
+				log.Fatalf("Failed to start Discord bot: %v", err)
+			}
+			defer discordBot.Stop()
+			log.Println("Discord bot is running")
+		}
+
+		// Start Twitch bot if configured (blocking)
+		if twitchEnabled {
+			bot := dwarfbot.DwarfBot{
+				Credentials: &dwarfbot.OAuthCreds{
+					Name:  name,
+					Token: twitchToken,
+				},
+				Verbose:  verbose,
+				Server:   server,
+				Port:     port,
+				Channels: twitchChannels,
+				Name:     name,
+			}
+
+			bot.Start()
+		} else {
+			// Discord-only mode: wait for interrupt signal
+			log.Println("Running in Discord-only mode. Press Ctrl+C to stop.")
+			sc := make(chan os.Signal, 1)
+			signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
+			<-sc
+			log.Println("Shutting down...")
+		}
 	},
 }
 
@@ -90,25 +131,32 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.dwarfbot.yaml)")
 
-	// Configure the server to connect to
-	rootCmd.PersistentFlags().StringP("server", "s", twitchChatServer, fmt.Sprintf("server to connect to (default: %s)", twitchChatServer))
+	// Twitch configuration
+	rootCmd.PersistentFlags().StringP("server", "s", twitchChatServer, fmt.Sprintf("Twitch IRC server (default: %s)", twitchChatServer))
 	viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
 
-	// Configure the port to use for the connection
-	rootCmd.PersistentFlags().StringP("port", "p", twitchChatPort, fmt.Sprintf("port to connect to (default: %s)", twitchChatPort))
+	rootCmd.PersistentFlags().StringP("port", "p", twitchChatPort, fmt.Sprintf("Twitch IRC port (default: %s)", twitchChatPort))
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 
-	// Configure the port to use for the connection
-	rootCmd.PersistentFlags().StringP("channels", "c", "", "channels to participate in (required, []string)")
+	rootCmd.PersistentFlags().StringP("channels", "c", "", "Twitch channels to participate in ([]string)")
 	viper.BindPFlag("channels", rootCmd.PersistentFlags().Lookup("channels"))
 
-	// Enable verbose logging to stdout
+	// General configuration
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")
 	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 
-	// IRC Nick to connect with
-	rootCmd.PersistentFlags().StringP("name", "n", "", "IRC Nick to connect as")
+	rootCmd.PersistentFlags().StringP("name", "n", "", "bot display name")
 	viper.BindPFlag("name", rootCmd.PersistentFlags().Lookup("name"))
+
+	// Discord configuration
+	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
+	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
+
+	rootCmd.PersistentFlags().StringSlice("discord-channels", []string{}, "Discord channel IDs to listen in")
+	viper.BindPFlag("discord_channels", rootCmd.PersistentFlags().Lookup("discord-channels"))
+
+	rootCmd.PersistentFlags().String("discord-admin-role", "dwarfbot-admin", "Discord role name for admin commands")
+	viper.BindPFlag("discord_admin_role", rootCmd.PersistentFlags().Lookup("discord-admin-role"))
 }
 
 // initConfig reads in config file and ENV variables if set.

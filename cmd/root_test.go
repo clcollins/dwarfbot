@@ -24,6 +24,9 @@ func TestRootCommandHasFlags(t *testing.T) {
 		{"channels", "c"},
 		{"verbose", "v"},
 		{"name", "n"},
+		{"discord-token", ""},
+		{"discord-channels", ""},
+		{"discord-admin-role", ""},
 	}
 
 	for _, f := range flags {
@@ -75,5 +78,15 @@ func TestVerboseFlagDefault(t *testing.T) {
 	}
 	if flag.DefValue != "false" {
 		t.Errorf("expected verbose default 'false', got %q", flag.DefValue)
+	}
+}
+
+func TestDiscordAdminRoleDefault(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("discord-admin-role")
+	if flag == nil {
+		t.Fatal("discord-admin-role flag not found")
+	}
+	if flag.DefValue != "dwarfbot-admin" {
+		t.Errorf("expected discord-admin-role default 'dwarfbot-admin', got %q", flag.DefValue)
 	}
 }

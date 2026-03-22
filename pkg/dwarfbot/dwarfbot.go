@@ -291,3 +291,26 @@ func (db *DwarfBot) Say(channelName, msg string) error {
 
 	return nil
 }
+
+// ChatPlatform interface implementation for DwarfBot (Twitch).
+
+func (db *DwarfBot) SendMessage(channel, msg string) error {
+	return db.Say(channel, msg)
+}
+
+func (db *DwarfBot) IsAdmin(channel, user string) bool {
+	return user == channel
+}
+
+func (db *DwarfBot) BotName() string {
+	return db.Name
+}
+
+func (db *DwarfBot) BotChannels() []string {
+	return db.Channels
+}
+
+func (db *DwarfBot) Shutdown(exitCode int) {
+	db.Disconnect()
+	db.Die(exitCode)
+}

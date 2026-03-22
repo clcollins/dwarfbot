@@ -31,47 +31,46 @@ import (
 	"strings"
 )
 
-func parseAdminCommand(db *DwarfBot, channelName string, cmd string, arguments []string) error {
+func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, arguments []string) error {
 	var err error
 
 	switch cmd {
 	case "shutdown":
-		db.Say(channelName, "Yah, boss! Shuttin' 'er doon!")
-		db.Disconnect()
-		db.Die(0)
+		platform.SendMessage(channelName, "Yah, boss! Shuttin' 'er doon!")
+		platform.Shutdown(0)
 		return nil
 	}
 	return err
 }
 
-func parseCommand(db *DwarfBot, channelName string, userName string, cmd string, arguments []string) error {
+func parseCommand(platform ChatPlatform, channelName string, userName string, cmd string, arguments []string) error {
 	var err error
 
-	if userName == channelName {
+	if platform.IsAdmin(channelName, userName) {
 		log.Printf("Received orders from the boss...")
-		parseAdminCommand(db, channelName, cmd, arguments)
+		parseAdminCommand(platform, channelName, cmd, arguments)
 	}
 
 	switch cmd {
 	case "ping":
-		ping(db, channelName, arguments)
+		ping(platform, channelName, arguments)
 	case "channels":
-		channels(db, channelName, arguments)
+		channels(platform, channelName, arguments)
 	}
 
 	return err
 }
 
-func ping(db *DwarfBot, channelName string, arguments []string) error {
+func ping(platform ChatPlatform, channelName string, arguments []string) error {
 	re := regexp.MustCompile(`(?i)heyo.+`)
 
 	switch {
 	case contains(arguments, strings.ToLower("heyo")):
-		db.Say(channelName, "Heyo, yourself boy-o!")
+		platform.SendMessage(channelName, "Heyo, yourself boy-o!")
 	case reContains(arguments, re):
-		db.Say(channelName, "Heyo, yourself boy-o!")
+		platform.SendMessage(channelName, "Heyo, yourself boy-o!")
 	default:
-		db.Say(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
+		platform.SendMessage(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
 	}
 
 	return nil
@@ -95,11 +94,11 @@ func contains(list []string, item string) bool {
 	return false
 }
 
-func channels(db *DwarfBot, channelName string, arguments []string) error {
-	msg := fmt.Sprintf("Aye, I like ta hang about here: %s", db.Name)
-	for _, channel := range db.Channels {
+func channels(platform ChatPlatform, channelName string, arguments []string) error {
+	msg := fmt.Sprintf("Aye, I like ta hang about here: %s", platform.BotName())
+	for _, channel := range platform.BotChannels() {
 		msg = msg + fmt.Sprintf(" %s", channel)
 	}
-	db.Say(channelName, msg)
+	platform.SendMessage(channelName, msg)
 	return nil
 }

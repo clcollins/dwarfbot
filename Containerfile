@@ -1,4 +1,4 @@
-FROM docker.io/library/golang:1.15 as builder
+FROM docker.io/library/golang:1.24 as builder
 
 RUN mkdir /src
 WORKDIR /src
@@ -10,7 +10,7 @@ RUN out/dwarfbot --help
 
 
 # Build the final image
-FROM registry.access.redhat.com/ubi8/ubi-minimal
+FROM registry.access.redhat.com/ubi9/ubi-minimal
 COPY --from=builder /src/out/dwarfbot /dwarfbot
 
 USER 1000

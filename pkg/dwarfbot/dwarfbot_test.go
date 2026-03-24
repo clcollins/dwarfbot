@@ -627,7 +627,7 @@ func TestHandleChat_Verbose(t *testing.T) {
 		line := ":user!user@user.tmi.twitch.tv PRIVMSG #testchannel :!dwarfbot ping\r\n"
 		_, _ = server.Write([]byte(line))
 		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-		io.ReadAll(server)
+		_, _ = io.ReadAll(server)
 		server.Close()
 	}()
 
@@ -692,7 +692,7 @@ func TestHandleChat_ChannelsCommand(t *testing.T) {
 		server.Close()
 	}()
 
-	bot.HandleChat()
+	_ = bot.HandleChat()
 }
 
 func TestHandleChat_AdminShutdown(t *testing.T) {
@@ -717,7 +717,7 @@ func TestHandleChat_AdminShutdown(t *testing.T) {
 		server.Close()
 	}()
 
-	bot.HandleChat()
+	_ = bot.HandleChat()
 
 	if !shutdownCalled {
 		t.Error("expected shutdown/Die to be called for admin shutdown command")
@@ -733,7 +733,7 @@ func TestHandleChat_MultiplePings(t *testing.T) {
 		_, _ = server.Write([]byte("PING :tmi.twitch.tv\r\n"))
 		buf := make([]byte, 4096)
 		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-		server.Read(buf) // read first PONG
+		_, _ = server.Read(buf) // read first PONG
 
 		_, _ = server.Write([]byte("PING :tmi.twitch.tv\r\n"))
 		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))

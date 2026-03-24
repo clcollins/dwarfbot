@@ -66,16 +66,9 @@ endif
 
 .PHONY: mdlint
 mdlint:
-	@if command -v markdownlint 2>/dev/null; then \
-		markdownlint '**/*.md' --ignore node_modules; \
-	elif command -v markdownlint-cli2 2>/dev/null; then \
-		markdownlint-cli2 '**/*.md' '#node_modules'; \
-	elif command -v mdl 2>/dev/null; then \
-		mdl .; \
-	else \
-		echo "No markdown linter found, skipping (install: npm install -g markdownlint-cli2)"; \
-		exit 1; \
-	fi
+	@command -v markdownlint-cli2 >/dev/null 2>&1 \
+		&& markdownlint-cli2 '**/*.md' '#node_modules' \
+		|| { echo "markdownlint-cli2 not found (install: npm install -g markdownlint-cli2)"; exit 1; }
 
 # --- Aggregate targets ---
 

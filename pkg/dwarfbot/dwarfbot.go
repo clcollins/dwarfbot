@@ -127,10 +127,7 @@ func (db *DwarfBot) Start() {
 		// Join secondary channels
 		for _, channel := range db.Channels {
 			db.JoinChannel(channel)
-			defer db.PartChannel(channel)
 		}
-
-		defer db.PartChannel(db.Name)
 
 		err = db.HandleChat()
 		if err != nil {
@@ -219,7 +216,7 @@ func (db *DwarfBot) HandleChat() error {
 				errMsg = fmt.Sprintf("(%s)", err)
 			}
 
-			return errors.New(fmt.Sprintf("Failed to read line from channel, disconnecting %s", errMsg))
+			return fmt.Errorf("Failed to read line from channel, disconnecting %s", errMsg)
 		}
 
 		if db.Verbose {

@@ -123,7 +123,7 @@ func TestPing_Default(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		ping(bot, "testchannel", []string{})
+		_ = ping(bot, "testchannel", []string{})
 	}()
 
 	got := readFromConn(t, server)
@@ -140,7 +140,7 @@ func TestPing_Heyo(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		ping(bot, "testchannel", []string{"heyo"})
+		_ = ping(bot, "testchannel", []string{"heyo"})
 	}()
 
 	got := readFromConn(t, server)
@@ -154,7 +154,7 @@ func TestPing_HeyoExtended(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		ping(bot, "testchannel", []string{"heyooo"})
+		_ = ping(bot, "testchannel", []string{"heyooo"})
 	}()
 
 	got := readFromConn(t, server)

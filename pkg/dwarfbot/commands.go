@@ -95,6 +95,5 @@ func channels(platform ChatPlatform, channelName string, arguments []string) err
 	for _, channel := range platform.BotChannels() {
 		msg = msg + fmt.Sprintf(" %s", channel)
 	}
-	platform.SendMessage(channelName, msg)
-	return nil
+	return platform.SendMessage(channelName, msg)
 }

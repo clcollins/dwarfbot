@@ -163,7 +163,7 @@ func (db *DwarfBot) Connect() {
 }
 
 func (db *DwarfBot) Disconnect() {
-	db.conn.Close()
+	_ = db.conn.Close()
 	log.Printf("Connection closed; elapsed time %g", (time.Since(db.startTime).Seconds()))
 }
 
@@ -216,14 +216,14 @@ func (db *DwarfBot) HandleChat() error {
 				errMsg = fmt.Sprintf("(%s)", err)
 			}
 
-			return fmt.Errorf("Failed to read line from channel, disconnecting %s", errMsg)
+			return fmt.Errorf("failed to read line from channel, disconnecting %s", errMsg)
 		}
 
 		if db.Verbose {
 			log.Println(line)
 		}
 
-		if "PING :tmi.twitch.tv" == line {
+		if line == "PING :tmi.twitch.tv" {
 
 			// Must reply to PING messages with PONG message to stay connected
 			pong := "PONG :tmi.twitch.tv\r\n"
@@ -278,7 +278,7 @@ func (db *DwarfBot) Say(channelName, msg string) error {
 		return errors.New("msg was empty")
 	}
 
-	_, err := db.conn.Write([]byte(fmt.Sprintf("PRIVMSG #%s :%s\r\n", channelName, msg)))
+	_, err := fmt.Fprintf(db.conn, "PRIVMSG #%s :%s\r\n", channelName, msg)
 	log.Printf("%s #%s: %s", db.Name, channelName, msg)
 
 	if err != nil {

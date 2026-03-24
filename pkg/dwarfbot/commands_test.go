@@ -237,8 +237,8 @@ func TestChannels_NoExtra(t *testing.T) {
 		exitFunc: func(code int) {},
 	}
 	defer func() {
-		client.Close()
-		server.Close()
+		_ = client.Close()
+		_ = server.Close()
 	}()
 
 	go func() {

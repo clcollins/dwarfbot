@@ -28,8 +28,8 @@ func newTestBot(t *testing.T) (*DwarfBot, net.Conn, func()) {
 		exitFunc: func(code int) {}, // no-op for tests
 	}
 	cleanup := func() {
-		client.Close()
-		server.Close()
+		_ = client.Close()
+		_ = server.Close()
 	}
 	return bot, server, cleanup
 }
@@ -331,8 +331,8 @@ func TestSay_ClosedConn(t *testing.T) {
 		conn: client,
 		Name: "testbot",
 	}
-	client.Close()
-	server.Close()
+	_ = client.Close()
+	_ = server.Close()
 
 	err := bot.Say("channel", "test message")
 	if err == nil {
@@ -550,7 +550,7 @@ func TestHandleChat_Ping(t *testing.T) {
 		if !strings.Contains(response, "PONG :tmi.twitch.tv") {
 			t.Errorf("expected PONG response, got %q", response)
 		}
-		server.Close()
+		_ = server.Close()
 	}()
 
 	err := bot.HandleChat()
@@ -576,7 +576,7 @@ func TestHandleChat_PrivmsgCommand(t *testing.T) {
 		if !strings.Contains(response, "Atari") {
 			t.Errorf("expected ping response containing 'Atari', got %q", response)
 		}
-		server.Close()
+		_ = server.Close()
 	}()
 
 	err := bot.HandleChat()
@@ -592,7 +592,7 @@ func TestHandleChat_NonMatchingLine(t *testing.T) {
 	go func() {
 		_, _ = server.Write([]byte("some random IRC line\r\n"))
 		time.Sleep(50 * time.Millisecond)
-		server.Close()
+		_ = server.Close()
 	}()
 
 	err := bot.HandleChat()
@@ -609,7 +609,7 @@ func TestHandleChat_WrongBotAlias(t *testing.T) {
 		line := ":someuser!someuser@someuser.tmi.twitch.tv PRIVMSG #testchannel :!otherbot ping\r\n"
 		_, _ = server.Write([]byte(line))
 		time.Sleep(50 * time.Millisecond)
-		server.Close()
+		_ = server.Close()
 	}()
 
 	err := bot.HandleChat()
@@ -628,7 +628,7 @@ func TestHandleChat_Verbose(t *testing.T) {
 		_, _ = server.Write([]byte(line))
 		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		_, _ = io.ReadAll(server)
-		server.Close()
+		_ = server.Close()
 	}()
 
 	err := bot.HandleChat()
@@ -643,7 +643,7 @@ func TestHandleChat_VerboseErrorMessage(t *testing.T) {
 	defer cleanup()
 
 	// Close immediately to trigger error with verbose message
-	server.Close()
+	_ = server.Close()
 
 	err := bot.HandleChat()
 	if err == nil {
@@ -660,7 +660,7 @@ func TestHandleChat_NonVerboseErrorMessage(t *testing.T) {
 	bot.Verbose = false
 	defer cleanup()
 
-	server.Close()
+	_ = server.Close()
 
 	err := bot.HandleChat()
 	if err == nil {
@@ -689,7 +689,7 @@ func TestHandleChat_ChannelsCommand(t *testing.T) {
 		if !strings.Contains(response, "channel1") || !strings.Contains(response, "channel2") {
 			t.Errorf("expected channels in response, got %q", response)
 		}
-		server.Close()
+		_ = server.Close()
 	}()
 
 	_ = bot.HandleChat()
@@ -714,7 +714,7 @@ func TestHandleChat_AdminShutdown(t *testing.T) {
 		if !strings.Contains(response, "Shuttin") {
 			t.Errorf("expected shutdown message, got %q", response)
 		}
-		server.Close()
+		_ = server.Close()
 	}()
 
 	_ = bot.HandleChat()
@@ -742,7 +742,7 @@ func TestHandleChat_MultiplePings(t *testing.T) {
 		if !strings.Contains(response, "PONG") {
 			t.Errorf("expected second PONG, got %q", response)
 		}
-		server.Close()
+		_ = server.Close()
 	}()
 
 	err := bot.HandleChat()
@@ -765,7 +765,7 @@ func TestHandleChat_HammerdwarfbotAlias(t *testing.T) {
 		if !strings.Contains(response, "PRIVMSG #testchannel") {
 			t.Errorf("expected PRIVMSG response for hammerdwarfbot alias, got %q", response)
 		}
-		server.Close()
+		_ = server.Close()
 	}()
 
 	err := bot.HandleChat()

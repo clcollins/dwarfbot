@@ -359,9 +359,8 @@ func TestDiscordBot_Shutdown_ZeroExitCode(t *testing.T) {
 	}
 }
 
-func TestDiscordBot_Shutdown_NoExitFunc(t *testing.T) {
-	// When exitFunc is nil, Shutdown defaults to os.Exit.
-	// Verify this by setting an exitFunc and confirming it's called.
+func TestDiscordBot_Shutdown_WithCustomExitFunc(t *testing.T) {
+	// Verify that Shutdown calls the provided exitFunc when set.
 	called := false
 	bot := &DiscordBot{
 		exitFunc: func(code int) { called = true },

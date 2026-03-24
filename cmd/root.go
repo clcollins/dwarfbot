@@ -96,7 +96,11 @@ var rootCmd = &cobra.Command{
 			log.Println("Discord bot is running")
 		}
 
-		// Start Twitch bot if configured (blocking)
+		// Handle graceful shutdown via signal for all modes
+		sc := make(chan os.Signal, 1)
+		signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
+
+		// Start Twitch bot if configured (blocking, run in goroutine)
 		if twitchEnabled {
 			bot := dwarfbot.DwarfBot{
 				Credentials: &dwarfbot.OAuthCreds{
@@ -110,15 +114,12 @@ var rootCmd = &cobra.Command{
 				Name:     name,
 			}
 
-			bot.Start()
-		} else {
-			// Discord-only mode: wait for interrupt signal
-			log.Println("Running in Discord-only mode. Press Ctrl+C to stop.")
-			sc := make(chan os.Signal, 1)
-			signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
-			<-sc
-			log.Println("Shutting down...")
+			go bot.Start()
 		}
+
+		// Wait for interrupt signal
+		<-sc
+		log.Println("Shutting down...")
 	},
 }
 

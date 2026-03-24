@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -33,6 +34,7 @@ type DiscordBot struct {
 	// adminRoleCache maps guild ID to resolved admin role ID to avoid
 	// repeated REST lookups on every admin check.
 	adminRoleCache map[string]string
+	adminRoleMu    sync.RWMutex
 }
 
 // Start creates the Discord session, registers handlers, and opens the connection.
@@ -44,6 +46,8 @@ func (d *DiscordBot) Start() error {
 	}
 
 	d.session.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
+
+	d.adminRoleCache = make(map[string]string)
 
 	d.session.AddHandler(d.messageHandler)
 
@@ -129,7 +133,9 @@ func (d *DiscordBot) IsAdmin(channel, userID string) bool {
 
 	// Resolve and cache the admin role ID per guild to avoid repeated
 	// GuildRoles REST calls on every admin check.
+	d.adminRoleMu.RLock()
 	adminRoleID, cached := d.adminRoleCache[ch.GuildID]
+	d.adminRoleMu.RUnlock()
 	if !cached {
 		roles, err := d.session.GuildRoles(ch.GuildID)
 		if err != nil {
@@ -142,10 +148,9 @@ func (d *DiscordBot) IsAdmin(channel, userID string) bool {
 				break
 			}
 		}
-		if d.adminRoleCache == nil {
-			d.adminRoleCache = make(map[string]string)
-		}
+		d.adminRoleMu.Lock()
 		d.adminRoleCache[ch.GuildID] = adminRoleID
+		d.adminRoleMu.Unlock()
 	}
 
 	if adminRoleID == "" {

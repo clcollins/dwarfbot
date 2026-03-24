@@ -45,6 +45,7 @@ test-cover:
 
 .PHONY: build
 build:
+	mkdir -p out
 	$(GO) build $(GOFLAGS) -o out/$(NAME) .
 
 # --- Container targets ---

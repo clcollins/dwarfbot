@@ -30,7 +30,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -40,9 +39,8 @@ import (
 
 // Default Twitch values
 var (
-	twitchChatServer      string        = "irc.chat.twitch.tv"
-	twitchChatPort        string        = "6667"
-	twitchChatMessageRate time.Duration = 20 * time.Millisecond / 30
+	twitchChatServer string = "irc.chat.twitch.tv"
+	twitchChatPort   string = "6667"
 )
 
 var cfgFile string
@@ -141,7 +139,7 @@ func init() {
 	rootCmd.PersistentFlags().StringP("port", "p", twitchChatPort, fmt.Sprintf("Twitch IRC port (default: %s)", twitchChatPort))
 	_ = viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 
-	rootCmd.PersistentFlags().StringP("channels", "c", "", "Twitch channels to participate in ([]string)")
+	rootCmd.PersistentFlags().StringSliceP("channels", "c", []string{}, "Twitch channels to participate in")
 	_ = viper.BindPFlag("channels", rootCmd.PersistentFlags().Lookup("channels"))
 
 	// General configuration

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"testing"
-	"time"
 )
 
 func TestRootCommandExists(t *testing.T) {
@@ -73,15 +72,6 @@ func TestDefaultServerAndPort(t *testing.T) {
 	}
 }
 
-func TestDefaultMessageRate(t *testing.T) {
-	if twitchChatMessageRate < 0 {
-		t.Errorf("expected non-negative message rate, got %v", twitchChatMessageRate)
-	}
-	if twitchChatMessageRate > time.Second {
-		t.Errorf("expected message rate under 1 second, got %v", twitchChatMessageRate)
-	}
-}
-
 func TestServerFlagDefault(t *testing.T) {
 	flag := rootCmd.PersistentFlags().Lookup("server")
 	if flag == nil {
@@ -127,8 +117,8 @@ func TestChannelsFlagDefault(t *testing.T) {
 	if flag == nil {
 		t.Fatal("channels flag not found")
 	}
-	if flag.DefValue != "" {
-		t.Errorf("expected empty channels default, got %q", flag.DefValue)
+	if flag.DefValue != "[]" {
+		t.Errorf("expected '[]' channels default, got %q", flag.DefValue)
 	}
 }
 

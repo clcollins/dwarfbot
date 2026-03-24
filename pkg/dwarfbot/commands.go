@@ -34,7 +34,9 @@ import (
 func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, arguments []string) error {
 	switch cmd {
 	case "shutdown":
-		_ = platform.SendMessage(channelName, "Yah, boss! Shuttin' 'er doon!")
+		if err := platform.SendMessage(channelName, "Yah, boss! Shuttin' 'er doon!"); err != nil {
+			log.Printf("failed to send shutdown message to channel %s: %v", channelName, err)
+		}
 		platform.Shutdown(0)
 		return nil
 	}
@@ -62,10 +64,15 @@ func parseCommand(platform ChatPlatform, channelName string, userName string, cm
 func ping(platform ChatPlatform, channelName string, arguments []string) error {
 	re := regexp.MustCompile(`(?i)heyo.+`)
 
+	lowerArgs := make([]string, len(arguments))
+	for i, a := range arguments {
+		lowerArgs[i] = strings.ToLower(a)
+	}
+
 	switch {
-	case contains(arguments, strings.ToLower("heyo")):
+	case contains(lowerArgs, "heyo"):
 		return platform.SendMessage(channelName, "Heyo, yourself boy-o!")
-	case reContains(arguments, re):
+	case reContains(lowerArgs, re):
 		return platform.SendMessage(channelName, "Heyo, yourself boy-o!")
 	default:
 		return platform.SendMessage(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")

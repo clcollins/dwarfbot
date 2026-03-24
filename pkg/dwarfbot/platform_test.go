@@ -138,7 +138,7 @@ func TestMockPlatform_Shutdown(t *testing.T) {
 
 func TestMockPlatform_ParseCommand_Ping(t *testing.T) {
 	mock := newMockPlatform("testbot", []string{"ch1"})
-	_ = parseCommand(mock,"ch1", "someuser", "ping", []string{})
+	_ = parseCommand(mock, "ch1", "someuser", "ping", []string{})
 
 	if len(mock.messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(mock.messages))
@@ -153,7 +153,7 @@ func TestMockPlatform_ParseCommand_Ping(t *testing.T) {
 
 func TestMockPlatform_ParseCommand_PingHeyo(t *testing.T) {
 	mock := newMockPlatform("testbot", []string{"ch1"})
-	_ = parseCommand(mock,"ch1", "user1", "ping", []string{"heyo"})
+	_ = parseCommand(mock, "ch1", "user1", "ping", []string{"heyo"})
 
 	if len(mock.messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(mock.messages))
@@ -165,7 +165,7 @@ func TestMockPlatform_ParseCommand_PingHeyo(t *testing.T) {
 
 func TestMockPlatform_ParseCommand_PingHeyoExtended(t *testing.T) {
 	mock := newMockPlatform("testbot", []string{"ch1"})
-	_ = parseCommand(mock,"ch1", "user1", "ping", []string{"heyoooo"})
+	_ = parseCommand(mock, "ch1", "user1", "ping", []string{"heyoooo"})
 
 	if len(mock.messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(mock.messages))
@@ -177,7 +177,7 @@ func TestMockPlatform_ParseCommand_PingHeyoExtended(t *testing.T) {
 
 func TestMockPlatform_ParseCommand_Channels(t *testing.T) {
 	mock := newMockPlatform("dwarfbot", []string{"general", "gaming"})
-	_ = parseCommand(mock,"general", "user1", "channels", []string{})
+	_ = parseCommand(mock, "general", "user1", "channels", []string{})
 
 	if len(mock.messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(mock.messages))
@@ -193,7 +193,7 @@ func TestMockPlatform_ParseCommand_Channels(t *testing.T) {
 
 func TestMockPlatform_ParseCommand_Channels_EmptyList(t *testing.T) {
 	mock := newMockPlatform("solobot", []string{})
-	_ = parseCommand(mock,"ch1", "user1", "channels", []string{})
+	_ = parseCommand(mock, "ch1", "user1", "channels", []string{})
 
 	if len(mock.messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(mock.messages))
@@ -205,7 +205,7 @@ func TestMockPlatform_ParseCommand_Channels_EmptyList(t *testing.T) {
 
 func TestMockPlatform_ParseCommand_Unknown(t *testing.T) {
 	mock := newMockPlatform("testbot", []string{"ch1"})
-	_ = parseCommand(mock,"ch1", "user1", "nonexistent", []string{})
+	_ = parseCommand(mock, "ch1", "user1", "nonexistent", []string{})
 
 	if len(mock.messages) != 0 {
 		t.Errorf("expected no messages for unknown command, got %d", len(mock.messages))
@@ -217,7 +217,7 @@ func TestMockPlatform_AdminShutdown(t *testing.T) {
 		return user == "admin_user"
 	})
 
-	_ = parseCommand(mock,"ch1", "admin_user", "shutdown", []string{})
+	_ = parseCommand(mock, "ch1", "admin_user", "shutdown", []string{})
 
 	if len(mock.messages) != 1 {
 		t.Fatalf("expected 1 shutdown message, got %d messages", len(mock.messages))
@@ -235,7 +235,7 @@ func TestMockPlatform_NonAdminCannotShutdown(t *testing.T) {
 		return false
 	})
 
-	_ = parseCommand(mock,"ch1", "regular_user", "shutdown", []string{})
+	_ = parseCommand(mock, "ch1", "regular_user", "shutdown", []string{})
 
 	if len(mock.shutdownLog) != 0 {
 		t.Error("expected Shutdown NOT to be called for non-admin")
@@ -250,7 +250,7 @@ func TestMockPlatform_AdminPingStillWorks(t *testing.T) {
 		return user == "admin_user"
 	})
 
-	_ = parseCommand(mock,"ch1", "admin_user", "ping", []string{})
+	_ = parseCommand(mock, "ch1", "admin_user", "ping", []string{})
 
 	// Admin users can also use regular commands
 	if len(mock.messages) != 1 {
@@ -360,9 +360,16 @@ func TestDiscordBot_Shutdown_ZeroExitCode(t *testing.T) {
 }
 
 func TestDiscordBot_Shutdown_NoExitFunc(t *testing.T) {
-	bot := &DiscordBot{}
-	// Should not panic with nil exitFunc
+	// When exitFunc is nil, Shutdown defaults to os.Exit.
+	// Verify this by setting an exitFunc and confirming it's called.
+	called := false
+	bot := &DiscordBot{
+		exitFunc: func(code int) { called = true },
+	}
 	bot.Shutdown(0)
+	if !called {
+		t.Error("expected exitFunc to be called")
+	}
 }
 
 func TestDiscordBot_Stop_NilSession(t *testing.T) {

@@ -31,7 +31,7 @@ lint:
 ifdef GOLANGCI_LINT
 	golangci-lint run ./...
 else
-	@echo "golangci-lint not installed, skipping (install: https://golangci-lint.run/welcome/install/)"
+	@echo "golangci-lint is required but not installed (install: https://golangci-lint.run/welcome/install/)"
 	@exit 1
 endif
 

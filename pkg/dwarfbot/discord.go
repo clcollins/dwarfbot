@@ -3,6 +3,7 @@ package dwarfbot
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -28,6 +29,10 @@ type DiscordBot struct {
 	// exitFunc is called by Shutdown to exit the process.
 	// Defaults to os.Exit if nil. Used for testing.
 	exitFunc func(int)
+
+	// adminRoleCache maps guild ID to resolved admin role ID to avoid
+	// repeated REST lookups on every admin check.
+	adminRoleCache map[string]string
 }
 
 // Start creates the Discord session, registers handlers, and opens the connection.
@@ -91,7 +96,9 @@ func (d *DiscordBot) messageHandler(s *discordgo.Session, m *discordgo.MessageCr
 
 	log.Printf("Discord: %s #%s: %s", m.Author.Username, m.ChannelID, m.Content)
 
-	_ = parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments)
+	if err := parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments); err != nil {
+		log.Printf("Discord: error handling command %q from user %s in channel %s: %v", cmd, m.Author.ID, m.ChannelID, err)
+	}
 }
 
 // ChatPlatform interface implementation for DiscordBot.
@@ -120,30 +127,35 @@ func (d *DiscordBot) IsAdmin(channel, userID string) bool {
 		return false
 	}
 
+	// Resolve and cache the admin role ID per guild to avoid repeated
+	// GuildRoles REST calls on every admin check.
+	adminRoleID, cached := d.adminRoleCache[ch.GuildID]
+	if !cached {
+		roles, err := d.session.GuildRoles(ch.GuildID)
+		if err != nil {
+			log.Printf("Discord: error getting guild roles: %v", err)
+			return false
+		}
+		for _, role := range roles {
+			if strings.EqualFold(role.Name, d.AdminRole) {
+				adminRoleID = role.ID
+				break
+			}
+		}
+		if d.adminRoleCache == nil {
+			d.adminRoleCache = make(map[string]string)
+		}
+		d.adminRoleCache[ch.GuildID] = adminRoleID
+	}
+
+	if adminRoleID == "" {
+		return false
+	}
+
 	// Get the member's roles in this guild
 	member, err := d.session.GuildMember(ch.GuildID, userID)
 	if err != nil {
 		log.Printf("Discord: error getting member info: %v", err)
-		return false
-	}
-
-	// Get guild roles to find the admin role ID
-	roles, err := d.session.GuildRoles(ch.GuildID)
-	if err != nil {
-		log.Printf("Discord: error getting guild roles: %v", err)
-		return false
-	}
-
-	// Find the admin role ID by name
-	var adminRoleID string
-	for _, role := range roles {
-		if strings.EqualFold(role.Name, d.AdminRole) {
-			adminRoleID = role.ID
-			break
-		}
-	}
-
-	if adminRoleID == "" {
 		return false
 	}
 
@@ -171,4 +183,5 @@ func (d *DiscordBot) Shutdown(exitCode int) {
 		d.exitFunc(exitCode)
 		return
 	}
+	os.Exit(exitCode)
 }

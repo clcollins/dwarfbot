@@ -82,7 +82,7 @@ jobs:
       - name: Build binary
         run: go build -o out/dwarfbot .
       - name: Verify binary runs
-        run: ./out/dwarfbot --help || true
+        run: ./out/dwarfbot --help
 
   image-build:
     name: Container Image Build

@@ -71,10 +71,10 @@ var rootCmd = &cobra.Command{
 		discordAdminRole := viper.GetString("discord_admin_role")
 
 		twitchEnabled := twitchToken != "" && len(twitchChannels) > 0
-		discordEnabled := discordToken != ""
+		discordEnabled := discordToken != "" && len(discordChannels) > 0
 
 		if !twitchEnabled && !discordEnabled {
-			log.Fatal("At least one platform must be configured (Twitch: token + channels, Discord: discord_token)")
+			log.Fatal("At least one platform must be configured (Twitch: token + channels, Discord: discord_token + discord_channels)")
 		}
 
 		// Start Discord bot if configured

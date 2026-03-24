@@ -2,7 +2,7 @@ FROM registry.access.redhat.com/ubi9/go-toolset:1.25 as builder
 
 COPY . .
 
-RUN mkdir -p out && go build -o out/dwarfbot
+RUN mkdir -p out && go build -buildvcs=false -o out/dwarfbot
 RUN out/dwarfbot --help
 
 

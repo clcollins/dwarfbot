@@ -91,7 +91,7 @@ func (d *DiscordBot) messageHandler(s *discordgo.Session, m *discordgo.MessageCr
 
 	log.Printf("Discord: %s #%s: %s", m.Author.Username, m.ChannelID, m.Content)
 
-	parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments)
+	_ = parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments)
 }
 
 // ChatPlatform interface implementation for DiscordBot.
@@ -166,7 +166,7 @@ func (d *DiscordBot) BotChannels() []string {
 }
 
 func (d *DiscordBot) Shutdown(exitCode int) {
-	d.Stop()
+	_ = d.Stop()
 	if d.exitFunc != nil {
 		d.exitFunc(exitCode)
 		return

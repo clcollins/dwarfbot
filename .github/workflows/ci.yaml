@@ -97,7 +97,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Install checkmake
-        run: go install github.com/mrtazz/checkmake/cmd/checkmake@latest
+        run: go install github.com/checkmake/checkmake/cmd/checkmake@latest
       - name: Run checkmake
         run: checkmake Makefile
 

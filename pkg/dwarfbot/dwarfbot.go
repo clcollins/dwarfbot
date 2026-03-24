@@ -171,8 +171,8 @@ func (db *DwarfBot) Disconnect() {
 }
 
 func (db *DwarfBot) Authenticate() {
-	db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n"))
-	db.conn.Write([]byte("NICK " + db.Name + "\r\n"))
+	_, _ = db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n"))
+	_, _ = db.conn.Write([]byte("NICK " + db.Name + "\r\n"))
 }
 
 // JoinChannel joins a specific IRC Channel
@@ -182,7 +182,7 @@ func (db *DwarfBot) JoinChannel(channel string) {
 	}
 
 	// Channel login must be lowercase (https://dev.twitch.tv/docs/irc/guide#syntax-notes)
-	db.conn.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
+	_, _ = db.conn.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
 
 	log.Printf("Joined channel #%s as @%s", channel, db.Name)
 }
@@ -192,7 +192,7 @@ func (db *DwarfBot) PartChannel(channel string) {
 		return
 	}
 
-	db.conn.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n"))
+	_, _ = db.conn.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n"))
 	log.Printf("Parted from channel #%s", channel)
 }
 
@@ -230,7 +230,7 @@ func (db *DwarfBot) HandleChat() error {
 
 			// Must reply to PING messages with PONG message to stay connected
 			pong := "PONG :tmi.twitch.tv\r\n"
-			db.conn.Write([]byte(pong))
+			_, _ = db.conn.Write([]byte(pong))
 			log.Print(pong)
 			continue
 
@@ -263,9 +263,8 @@ func (db *DwarfBot) HandleChat() error {
 							break
 						}
 
-						parseCommand(db, channelName, userName, cmd, arguments)
-						if err != nil {
-							return err
+						if cmdErr := parseCommand(db, channelName, userName, cmd, arguments); cmdErr != nil {
+							return cmdErr
 						}
 					}
 				default:

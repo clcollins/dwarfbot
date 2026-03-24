@@ -245,7 +245,7 @@ func TestChannels_NoExtra(t *testing.T) {
 		channels(bot, "testchannel", []string{})
 	}()
 
-	server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 	buf := make([]byte, 4096)
 	n, _ := server.Read(buf)
 	got := string(buf[:n])
@@ -321,7 +321,7 @@ func TestParseCommand_Unknown(t *testing.T) {
 		parseCommand(bot, "testchannel", "someuser", "unknowncmd", []string{})
 	}()
 
-	server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 	buf := make([]byte, 256)
 	n, _ := server.Read(buf)
 	if n > 0 {
@@ -356,7 +356,7 @@ func TestParseCommand_AdminFromOwner(t *testing.T) {
 		parseCommand(bot, "owneruser", "owneruser", "shutdown", []string{})
 	}()
 
-	server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 	buf := make([]byte, 4096)
 	n, _ := server.Read(buf)
 	got := string(buf[:n])
@@ -381,7 +381,7 @@ func TestParseCommand_AdminFromNonOwner(t *testing.T) {
 		parseCommand(bot, "owneruser", "regularuser", "shutdown", []string{})
 	}()
 
-	server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 	buf := make([]byte, 256)
 	n, _ := server.Read(buf)
 	if n > 0 {
@@ -402,7 +402,7 @@ func TestParseAdminCommand_Shutdown(t *testing.T) {
 		parseAdminCommand(bot, "testchannel", "shutdown", []string{})
 	}()
 
-	server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 	buf := make([]byte, 4096)
 	n, _ := server.Read(buf)
 	got := string(buf[:n])
@@ -440,7 +440,7 @@ func TestParseAdminCommand_UnknownCommand(t *testing.T) {
 		parseAdminCommand(bot, "testchannel", "unknownadmin", []string{})
 	}()
 
-	server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 	buf := make([]byte, 256)
 	n, _ := server.Read(buf)
 	if n > 0 {

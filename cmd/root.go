@@ -42,7 +42,7 @@ import (
 var (
 	twitchChatServer      string        = "irc.chat.twitch.tv"
 	twitchChatPort        string        = "6667"
-	twitchChatMessageRate time.Duration = time.Duration(20/30) * time.Millisecond
+	twitchChatMessageRate time.Duration = 20 * time.Millisecond / 30
 )
 
 var cfgFile string
@@ -90,7 +90,9 @@ var rootCmd = &cobra.Command{
 			if err := discordBot.Start(); err != nil {
 				log.Fatalf("Failed to start Discord bot: %v", err)
 			}
-			defer discordBot.Stop()
+			defer func() {
+			_ = discordBot.Stop()
+		}()
 			log.Println("Discord bot is running")
 		}
 
@@ -133,30 +135,30 @@ func init() {
 
 	// Twitch configuration
 	rootCmd.PersistentFlags().StringP("server", "s", twitchChatServer, fmt.Sprintf("Twitch IRC server (default: %s)", twitchChatServer))
-	viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
+	_ = viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
 
 	rootCmd.PersistentFlags().StringP("port", "p", twitchChatPort, fmt.Sprintf("Twitch IRC port (default: %s)", twitchChatPort))
-	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
+	_ = viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 
 	rootCmd.PersistentFlags().StringP("channels", "c", "", "Twitch channels to participate in ([]string)")
-	viper.BindPFlag("channels", rootCmd.PersistentFlags().Lookup("channels"))
+	_ = viper.BindPFlag("channels", rootCmd.PersistentFlags().Lookup("channels"))
 
 	// General configuration
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")
-	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
 
 	rootCmd.PersistentFlags().StringP("name", "n", "", "bot display name")
-	viper.BindPFlag("name", rootCmd.PersistentFlags().Lookup("name"))
+	_ = viper.BindPFlag("name", rootCmd.PersistentFlags().Lookup("name"))
 
 	// Discord configuration
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
-	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
+	_ = viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
 
 	rootCmd.PersistentFlags().StringSlice("discord-channels", []string{}, "Discord channel IDs to listen in")
-	viper.BindPFlag("discord_channels", rootCmd.PersistentFlags().Lookup("discord-channels"))
+	_ = viper.BindPFlag("discord_channels", rootCmd.PersistentFlags().Lookup("discord-channels"))
 
 	rootCmd.PersistentFlags().String("discord-admin-role", "dwarfbot-admin", "Discord role name for admin commands")
-	viper.BindPFlag("discord_admin_role", rootCmd.PersistentFlags().Lookup("discord-admin-role"))
+	_ = viper.BindPFlag("discord_admin_role", rootCmd.PersistentFlags().Lookup("discord-admin-role"))
 }
 
 // initConfig reads in config file and ENV variables if set.

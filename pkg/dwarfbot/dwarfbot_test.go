@@ -37,7 +37,7 @@ func newTestBot(t *testing.T) (*DwarfBot, net.Conn, func()) {
 // readFromConn reads everything available from conn until it blocks, with a short deadline.
 func readFromConn(t *testing.T, conn net.Conn) string {
 	t.Helper()
-	conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 	buf := make([]byte, 4096)
 	n, _ := conn.Read(buf)
 	return string(buf[:n])
@@ -48,7 +48,7 @@ func readAllFromConn(t *testing.T, conn net.Conn, reads int) string {
 	t.Helper()
 	var all string
 	for i := 0; i < reads; i++ {
-		conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		buf := make([]byte, 4096)
 		n, _ := conn.Read(buf)
 		all += string(buf[:n])
@@ -316,7 +316,7 @@ func TestSay_SpecialCharacters(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		bot.Say("testchannel", "Hello! @user #channel :colon")
+		_ = bot.Say("testchannel", "Hello! @user #channel :colon")
 	}()
 
 	got := readFromConn(t, server)
@@ -415,7 +415,7 @@ func TestJoinChannel_Empty(t *testing.T) {
 
 	bot.JoinChannel("")
 
-	server.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
 	buf := make([]byte, 256)
 	n, _ := server.Read(buf)
 	if n > 0 {
@@ -456,7 +456,7 @@ func TestPartChannel_Empty(t *testing.T) {
 
 	bot.PartChannel("")
 
-	server.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
+	_ = server.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
 	buf := make([]byte, 256)
 	n, _ := server.Read(buf)
 	if n > 0 {
@@ -542,9 +542,9 @@ func TestHandleChat_Ping(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		server.Write([]byte("PING :tmi.twitch.tv\r\n"))
+		_, _ = server.Write([]byte("PING :tmi.twitch.tv\r\n"))
 		buf := make([]byte, 4096)
-		server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		n, _ := server.Read(buf)
 		response := string(buf[:n])
 		if !strings.Contains(response, "PONG :tmi.twitch.tv") {
@@ -565,10 +565,10 @@ func TestHandleChat_PrivmsgCommand(t *testing.T) {
 
 	go func() {
 		line := ":someuser!someuser@someuser.tmi.twitch.tv PRIVMSG #testchannel :!dwarfbot ping\r\n"
-		server.Write([]byte(line))
+		_, _ = server.Write([]byte(line))
 
 		reader := bufio.NewReader(server)
-		server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		_ = server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 		response, _ := reader.ReadString('\n')
 		if !strings.Contains(response, "PRIVMSG #testchannel") {
 			t.Errorf("expected PRIVMSG response, got %q", response)
@@ -590,7 +590,7 @@ func TestHandleChat_NonMatchingLine(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		server.Write([]byte("some random IRC line\r\n"))
+		_, _ = server.Write([]byte("some random IRC line\r\n"))
 		time.Sleep(50 * time.Millisecond)
 		server.Close()
 	}()
@@ -607,7 +607,7 @@ func TestHandleChat_WrongBotAlias(t *testing.T) {
 
 	go func() {
 		line := ":someuser!someuser@someuser.tmi.twitch.tv PRIVMSG #testchannel :!otherbot ping\r\n"
-		server.Write([]byte(line))
+		_, _ = server.Write([]byte(line))
 		time.Sleep(50 * time.Millisecond)
 		server.Close()
 	}()
@@ -625,8 +625,8 @@ func TestHandleChat_Verbose(t *testing.T) {
 
 	go func() {
 		line := ":user!user@user.tmi.twitch.tv PRIVMSG #testchannel :!dwarfbot ping\r\n"
-		server.Write([]byte(line))
-		server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_, _ = server.Write([]byte(line))
+		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		io.ReadAll(server)
 		server.Close()
 	}()
@@ -678,10 +678,10 @@ func TestHandleChat_ChannelsCommand(t *testing.T) {
 
 	go func() {
 		line := ":someuser!someuser@someuser.tmi.twitch.tv PRIVMSG #testchannel :!dwarfbot channels\r\n"
-		server.Write([]byte(line))
+		_, _ = server.Write([]byte(line))
 
 		reader := bufio.NewReader(server)
-		server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		_ = server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 		response, _ := reader.ReadString('\n')
 		if !strings.Contains(response, "testbot") {
 			t.Errorf("expected bot name in channels response, got %q", response)
@@ -706,10 +706,10 @@ func TestHandleChat_AdminShutdown(t *testing.T) {
 	go func() {
 		line := fmt.Sprintf(":%s!%s@%s.tmi.twitch.tv PRIVMSG #%s :!dwarfbot shutdown\r\n",
 			"testchannel", "testchannel", "testchannel", "testchannel")
-		server.Write([]byte(line))
+		_, _ = server.Write([]byte(line))
 
 		reader := bufio.NewReader(server)
-		server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		_ = server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 		response, _ := reader.ReadString('\n')
 		if !strings.Contains(response, "Shuttin") {
 			t.Errorf("expected shutdown message, got %q", response)
@@ -730,13 +730,13 @@ func TestHandleChat_MultiplePings(t *testing.T) {
 
 	go func() {
 		// Send two pings
-		server.Write([]byte("PING :tmi.twitch.tv\r\n"))
+		_, _ = server.Write([]byte("PING :tmi.twitch.tv\r\n"))
 		buf := make([]byte, 4096)
-		server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		server.Read(buf) // read first PONG
 
-		server.Write([]byte("PING :tmi.twitch.tv\r\n"))
-		server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+		_, _ = server.Write([]byte("PING :tmi.twitch.tv\r\n"))
+		_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		n, _ := server.Read(buf)
 		response := string(buf[:n])
 		if !strings.Contains(response, "PONG") {
@@ -757,10 +757,10 @@ func TestHandleChat_HammerdwarfbotAlias(t *testing.T) {
 
 	go func() {
 		line := ":someuser!someuser@someuser.tmi.twitch.tv PRIVMSG #testchannel :!hammerdwarfbot ping\r\n"
-		server.Write([]byte(line))
+		_, _ = server.Write([]byte(line))
 
 		reader := bufio.NewReader(server)
-		server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		_ = server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 		response, _ := reader.ReadString('\n')
 		if !strings.Contains(response, "PRIVMSG #testchannel") {
 			t.Errorf("expected PRIVMSG response for hammerdwarfbot alias, got %q", response)

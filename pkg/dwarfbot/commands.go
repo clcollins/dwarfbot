@@ -32,33 +32,31 @@ import (
 )
 
 func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, arguments []string) error {
-	var err error
-
 	switch cmd {
 	case "shutdown":
-		platform.SendMessage(channelName, "Yah, boss! Shuttin' 'er doon!")
+		_ = platform.SendMessage(channelName, "Yah, boss! Shuttin' 'er doon!")
 		platform.Shutdown(0)
 		return nil
 	}
-	return err
+	return nil
 }
 
 func parseCommand(platform ChatPlatform, channelName string, userName string, cmd string, arguments []string) error {
-	var err error
-
 	if platform.IsAdmin(channelName, userName) {
 		log.Printf("Received orders from the boss...")
-		parseAdminCommand(platform, channelName, cmd, arguments)
+		if err := parseAdminCommand(platform, channelName, cmd, arguments); err != nil {
+			return err
+		}
 	}
 
 	switch cmd {
 	case "ping":
-		ping(platform, channelName, arguments)
+		return ping(platform, channelName, arguments)
 	case "channels":
-		channels(platform, channelName, arguments)
+		return channels(platform, channelName, arguments)
 	}
 
-	return err
+	return nil
 }
 
 func ping(platform ChatPlatform, channelName string, arguments []string) error {
@@ -66,14 +64,12 @@ func ping(platform ChatPlatform, channelName string, arguments []string) error {
 
 	switch {
 	case contains(arguments, strings.ToLower("heyo")):
-		platform.SendMessage(channelName, "Heyo, yourself boy-o!")
+		return platform.SendMessage(channelName, "Heyo, yourself boy-o!")
 	case reContains(arguments, re):
-		platform.SendMessage(channelName, "Heyo, yourself boy-o!")
+		return platform.SendMessage(channelName, "Heyo, yourself boy-o!")
 	default:
-		platform.SendMessage(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
+		return platform.SendMessage(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
 	}
-
-	return nil
 }
 
 func reContains(list []string, re *regexp.Regexp) bool {

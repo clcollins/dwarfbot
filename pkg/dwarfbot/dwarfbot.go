@@ -59,20 +59,6 @@ type OAuthCreds struct {
 	Token string `json:"token,omitempty"`
 }
 
-type Bot interface {
-	// Start begins the bot loop, and tries to reconnect on error
-	Start()
-
-	// Connect to the IRC server
-	Connect()
-
-	// Disconnect from the IRC server
-	Disconnect()
-
-	// Shutdown the script
-	Die()
-}
-
 type DwarfBot struct {
 	// Channel to join, must be lowercase
 	Channels []string
@@ -211,12 +197,10 @@ func (db *DwarfBot) HandleChat() error {
 		if err != nil {
 			db.Disconnect()
 
-			var errMsg string
 			if db.Verbose {
-				errMsg = fmt.Sprintf("(%s)", err)
+				return fmt.Errorf("failed to read line from channel, disconnecting (%s)", err)
 			}
-
-			return fmt.Errorf("failed to read line from channel, disconnecting %s", errMsg)
+			return fmt.Errorf("failed to read line from channel, disconnecting")
 		}
 
 		if db.Verbose {

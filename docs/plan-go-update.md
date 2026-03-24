@@ -23,17 +23,17 @@ compatible version.
 | Package | Old Version | New Version |
 | ------- | ----------- | ----------- |
 | `github.com/spf13/cobra` | v1.8.1 | v1.10.2 |
-| `github.com/spf13/viper` | v1.19.0 | v1.21.0 |
+| `github.com/spf13/viper` | v1.19.0 | v1.20.1 |
 | `github.com/fsnotify/fsnotify` | v1.7.0 | v1.9.0 |
 | `github.com/pelletier/go-toml/v2` | v2.2.2 | v2.2.4 |
-| `github.com/sagikazarmark/locafero` | v0.6.0 | v0.11.0 |
-| `github.com/spf13/afero` | v1.11.0 | v1.15.0 |
+| `github.com/sagikazarmark/locafero` | v0.6.0 | v0.7.0 |
+| `github.com/spf13/afero` | v1.11.0 | v1.12.0 |
 | `github.com/spf13/cast` | v1.6.0 | v1.10.0 |
 | `github.com/spf13/pflag` | v1.0.5 | v1.0.10 |
-| `golang.org/x/sys` | v0.21.0 | v0.29.0 |
-| `golang.org/x/text` | v0.16.0 | v0.28.0 |
+| `golang.org/x/sys` | v0.21.0 | v0.30.0 |
+| `golang.org/x/text` | v0.16.0 | v0.22.0 |
 
-New indirect dependencies added by viper v1.21.0:
+New indirect dependencies added by viper v1.20.1:
 
 - `github.com/go-viper/mapstructure/v2` v2.4.0
 - `go.yaml.in/yaml/v3` v3.0.4

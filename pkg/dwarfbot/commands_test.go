@@ -168,7 +168,7 @@ func TestPing_HeyoAmongOtherArgs(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		ping(bot, "testchannel", []string{"something", "heyo"})
+		_ = ping(bot, "testchannel", []string{"something", "heyo"})
 	}()
 
 	got := readFromConn(t, server)
@@ -182,7 +182,7 @@ func TestPing_NonHeyoArgs(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		ping(bot, "testchannel", []string{"something", "else"})
+		_ = ping(bot, "testchannel", []string{"something", "else"})
 	}()
 
 	got := readFromConn(t, server)
@@ -213,7 +213,7 @@ func TestChannels(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		channels(bot, "testchannel", []string{})
+		_ = channels(bot, "testchannel", []string{})
 	}()
 
 	got := readFromConn(t, server)
@@ -242,7 +242,7 @@ func TestChannels_NoExtra(t *testing.T) {
 	}()
 
 	go func() {
-		channels(bot, "testchannel", []string{})
+		_ = channels(bot, "testchannel", []string{})
 	}()
 
 	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
@@ -274,7 +274,7 @@ func TestChannels_MessageFormat(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		channels(bot, "testchannel", []string{})
+		_ = channels(bot, "testchannel", []string{})
 	}()
 
 	got := readFromConn(t, server)
@@ -290,7 +290,7 @@ func TestParseCommand_Ping(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		parseCommand(bot, "testchannel", "someuser", "ping", []string{})
+		_ = parseCommand(bot, "testchannel", "someuser", "ping", []string{})
 	}()
 
 	got := readFromConn(t, server)
@@ -304,7 +304,7 @@ func TestParseCommand_Channels(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		parseCommand(bot, "testchannel", "someuser", "channels", []string{})
+		_ = parseCommand(bot, "testchannel", "someuser", "channels", []string{})
 	}()
 
 	got := readFromConn(t, server)
@@ -318,7 +318,7 @@ func TestParseCommand_Unknown(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		parseCommand(bot, "testchannel", "someuser", "unknowncmd", []string{})
+		_ = parseCommand(bot, "testchannel", "someuser", "unknowncmd", []string{})
 	}()
 
 	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
@@ -353,7 +353,7 @@ func TestParseCommand_AdminFromOwner(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		parseCommand(bot, "owneruser", "owneruser", "shutdown", []string{})
+		_ = parseCommand(bot, "owneruser", "owneruser", "shutdown", []string{})
 	}()
 
 	_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
@@ -378,7 +378,7 @@ func TestParseCommand_AdminFromNonOwner(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		parseCommand(bot, "owneruser", "regularuser", "shutdown", []string{})
+		_ = parseCommand(bot, "owneruser", "regularuser", "shutdown", []string{})
 	}()
 
 	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
@@ -399,7 +399,7 @@ func TestParseAdminCommand_Shutdown(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		parseAdminCommand(bot, "testchannel", "shutdown", []string{})
+		_ = parseAdminCommand(bot, "testchannel", "shutdown", []string{})
 	}()
 
 	_ = server.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
@@ -437,7 +437,7 @@ func TestParseAdminCommand_UnknownCommand(t *testing.T) {
 	defer cleanup()
 
 	go func() {
-		parseAdminCommand(bot, "testchannel", "unknownadmin", []string{})
+		_ = parseAdminCommand(bot, "testchannel", "unknownadmin", []string{})
 	}()
 
 	_ = server.SetReadDeadline(time.Now().Add(100 * time.Millisecond))

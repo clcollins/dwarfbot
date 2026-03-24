@@ -7,7 +7,7 @@ on:
     branches: [main, master]
 
 env:
-  GO_VERSION: "1.24"
+  GO_VERSION: "1.25"
   CONTAINER_SUBSYS: podman
   IMAGE_REGISTRY: quay.io
   IMAGE_NAME: quay.io/clcollins/dwarfbot

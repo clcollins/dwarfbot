@@ -25,6 +25,7 @@ package cmd
 
 import (
 	"dwarfbot/pkg/dwarfbot"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -32,8 +33,6 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
-
-	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
 )
 
@@ -163,28 +162,35 @@ func init() {
 }
 
 // initConfig reads in config file and ENV variables if set.
+// If no config file is found and none was explicitly requested via --config,
+// the bot falls back to environment variables (DWARFBOT_*) and CLI flags.
 func initConfig() {
 	if cfgFile != "" {
-		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Find home directory.
-		home, err := homedir.Dir()
-		cobra.CheckErr(err)
-
-		// Search config in home directory with name ".dwarfbot.yaml" (with extension).
-		// Note, Viper appends the .yaml when searching
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".dwarfbot")
+		home, err := os.UserHomeDir()
+		if err == nil {
+			viper.AddConfigPath(home)
+			viper.SetConfigType("yaml")
+			viper.SetConfigName(".dwarfbot")
+		}
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
+	viper.SetEnvPrefix("DWARFBOT")
+	viper.AutomaticEnv()
 
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	if err := viper.ReadInConfig(); err != nil {
+		if cfgFile != "" {
+			// User explicitly requested a config file that failed to load
+			log.Fatalf("Error reading config file: %s", err.Error())
+		}
+		var notFound viper.ConfigFileNotFoundError
+		if errors.As(err, &notFound) {
+			log.Println("No config file found; using environment variables and/or CLI flags")
+		} else {
+			log.Fatalf("Error reading config file: %s", err.Error())
+		}
 	} else {
-		log.Fatalf("%s", err.Error())
+		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	}
 }

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestRootCommandExists(t *testing.T) {
@@ -161,6 +163,59 @@ func TestDiscordAdminRoleDefault(t *testing.T) {
 	}
 	if flag.DefValue != "dwarfbot-admin" {
 		t.Errorf("expected discord-admin-role default 'dwarfbot-admin', got %q", flag.DefValue)
+	}
+}
+
+// --- initConfig tests ---
+
+func TestInitConfig_NoConfigFile(t *testing.T) {
+	// Point HOME at a directory with no .dwarfbot.yaml.
+	// If initConfig() still fatals on missing config, this test will crash.
+	t.Setenv("HOME", t.TempDir())
+	savedCfgFile := cfgFile
+	cfgFile = ""
+	defer func() { cfgFile = savedCfgFile }()
+
+	viper.Reset()
+	initConfig()
+	// If we get here, initConfig gracefully handled missing config file
+}
+
+func TestInitConfig_EnvVarPrefix(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DWARFBOT_NAME", "envbot")
+	t.Setenv("DWARFBOT_TOKEN", "env-test-token")
+	savedCfgFile := cfgFile
+	cfgFile = ""
+	defer func() { cfgFile = savedCfgFile }()
+
+	viper.Reset()
+	initConfig()
+
+	if got := viper.GetString("name"); got != "envbot" {
+		t.Errorf("expected DWARFBOT_NAME to set name='envbot', got %q", got)
+	}
+	if got := viper.GetString("token"); got != "env-test-token" {
+		t.Errorf("expected DWARFBOT_TOKEN to set token='env-test-token', got %q", got)
+	}
+}
+
+func TestInitConfig_DiscordEnvVars(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DWARFBOT_DISCORD_TOKEN", "discord-env-token")
+	t.Setenv("DWARFBOT_DISCORD_ADMIN_ROLE", "custom-role")
+	savedCfgFile := cfgFile
+	cfgFile = ""
+	defer func() { cfgFile = savedCfgFile }()
+
+	viper.Reset()
+	initConfig()
+
+	if got := viper.GetString("discord_token"); got != "discord-env-token" {
+		t.Errorf("expected DWARFBOT_DISCORD_TOKEN to set discord_token, got %q", got)
+	}
+	if got := viper.GetString("discord_admin_role"); got != "custom-role" {
+		t.Errorf("expected DWARFBOT_DISCORD_ADMIN_ROLE to set discord_admin_role, got %q", got)
 	}
 }
 

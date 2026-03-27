@@ -10,6 +10,6 @@ RUN out/dwarfbot --help
 FROM registry.access.redhat.com/ubi9/ubi-minimal
 COPY --from=builder /opt/app-root/src/out/dwarfbot /dwarfbot
 
-USER 1000
+USER 1001
 ENTRYPOINT ["/dwarfbot"]
 CMD ["--help"]

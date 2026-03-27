@@ -89,7 +89,9 @@ var rootCmd = &cobra.Command{
 				log.Fatalf("Failed to start Discord bot: %v", err)
 			}
 			defer func() {
-				_ = discordBot.Stop()
+				if err := discordBot.Stop(); err != nil {
+					log.Printf("Failed to stop Discord bot: %v", err)
+				}
 			}()
 			log.Println("Discord bot is running")
 		}

@@ -183,7 +183,9 @@ func (d *DiscordBot) BotChannels() []string {
 }
 
 func (d *DiscordBot) Shutdown(exitCode int) {
-	_ = d.Stop()
+	if err := d.Stop(); err != nil {
+		log.Printf("Error stopping Discord session: %v", err)
+	}
 	if d.exitFunc != nil {
 		d.exitFunc(exitCode)
 		return

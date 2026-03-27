@@ -149,7 +149,9 @@ func (db *DwarfBot) Connect() {
 }
 
 func (db *DwarfBot) Disconnect() {
-	_ = db.conn.Close()
+	if err := db.conn.Close(); err != nil {
+		log.Printf("Error closing connection: %v", err)
+	}
 	log.Printf("Connection closed; elapsed time %g", (time.Since(db.startTime).Seconds()))
 }
 

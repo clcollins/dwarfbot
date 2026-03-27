@@ -60,7 +60,8 @@ In `cmd/root.go`, the bot determines which platforms to start
 based on config:
 
 - **Twitch**: Enabled when `token` and `channels` are both set
-- **Discord**: Enabled when `discord_token` is set
+- **Discord**: Enabled when `discord_token` and `discord_channels`
+  are both set
 - **Error**: If neither platform is configured, the bot exits
   with an error
 - **Discord-only mode**: When only Discord is configured, the

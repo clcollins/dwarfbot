@@ -39,7 +39,7 @@ Added `viper.SetEnvPrefix("DWARFBOT")` so environment variables
 use the `DWARFBOT_` prefix:
 
 | Config Key | CLI Flag | Env Var |
-|---|---|---|
+| --- | --- | --- |
 | `name` | `--name` | `DWARFBOT_NAME` |
 | `token` | _(config/env only)_ | `DWARFBOT_TOKEN` |
 | `channels` | `--channels` | `DWARFBOT_CHANNELS` |

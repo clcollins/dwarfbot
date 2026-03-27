@@ -61,7 +61,7 @@ checkmake:
 ifdef CHECKMAKE
 	checkmake Makefile
 else
-	@echo "checkmake not installed, skipping (install: go install github.com/checkmake/checkmake/cmd/checkmake@latest)"
+	@echo "checkmake is required but not installed (install: go install github.com/checkmake/checkmake/cmd/checkmake@latest)"
 	@exit 1
 endif
 

@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  GO_VERSION: "1.25"
+  CONTAINER_SUBSYS: podman
+  IMAGE_REGISTRY: quay.io
+  IMAGE_NAME: quay.io/clcollins/dwarfbot
+
+jobs:
+  fmt:
+    name: Go Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Check formatting
+        run: |
+          output=$(gofmt -l .)
+          if [ -n "$output" ]; then
+            echo "Files not formatted:"
+            echo "$output"
+            exit 1
+          fi
+
+  vet:
+    name: Go Vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run go vet
+        run: go vet ./...
+
+  lint:
+    name: Go Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  test:
+    name: Go Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run tests with race detector
+        run: go test -v -count=1 -race ./...
+      - name: Run tests with coverage
+        run: go test -coverprofile=coverage.out -count=1 ./...
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+
+  build:
+    name: Go Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Build binary
+        run: mkdir -p out && go build -o out/dwarfbot .
+      - name: Verify binary runs
+        run: ./out/dwarfbot --help
+
+  image-build:
+    name: Container Image Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+      - name: Build container image
+        run: podman build -f Containerfile -t ${{ env.IMAGE_NAME }}:ci .
+
+  checkmake:
+    name: Makefile Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install checkmake
+        run: go install github.com/checkmake/checkmake/cmd/checkmake@latest
+      - name: Run checkmake
+        run: checkmake Makefile
+
+  mdlint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install markdownlint-cli2
+        run: npm install -g markdownlint-cli2
+      - name: Run markdownlint
+        run: markdownlint-cli2 '**/*.md' '#node_modules'

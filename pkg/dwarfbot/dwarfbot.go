@@ -1,7 +1,7 @@
 /*
 MIT License
 
-Copyright (c) 2021 Chris Collins
+# Copyright (c) 2021 Chris Collins
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -59,20 +59,6 @@ type OAuthCreds struct {
 	Token string `json:"token,omitempty"`
 }
 
-type Bot interface {
-	// Start begins the bot loop, and tries to reconnect on error
-	Start()
-
-	// Connect to the IRC server
-	Connect()
-
-	// Disconnect from the IRC server
-	Disconnect()
-
-	// Shutdown the script
-	Die()
-}
-
 type DwarfBot struct {
 	// Channel to join, must be lowercase
 	Channels []string
@@ -82,9 +68,6 @@ type DwarfBot struct {
 
 	// OAuth credential for authentication
 	Credentials *OAuthCreds
-
-	// Rate-limit bot messages. 20/30 millisecond is OK
-	MsgRate time.Duration
 
 	// Name of the bot used in chat
 	Name string
@@ -100,6 +83,10 @@ type DwarfBot struct {
 
 	// Verbose output
 	Verbose bool
+
+	// exitFunc is called by Die() to exit the process.
+	// Defaults to os.Exit if nil.
+	exitFunc func(int)
 }
 
 func (db *DwarfBot) Start() {
@@ -123,10 +110,7 @@ func (db *DwarfBot) Start() {
 		// Join secondary channels
 		for _, channel := range db.Channels {
 			db.JoinChannel(channel)
-			defer db.PartChannel(channel)
 		}
-
-		defer db.PartChannel(db.Name)
 
 		err = db.HandleChat()
 		if err != nil {
@@ -139,36 +123,46 @@ func (db *DwarfBot) Start() {
 }
 
 func (db *DwarfBot) Connect() {
-	var err error
-
 	// Return if no server is specified
 	if db.Server == "" || db.Port == "" {
 		log.Fatalf("IRC server and port must be specified")
-		return
 	}
 
-	// Creates connection to Twitch IRC server
-	db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
-	if err != nil {
-		log.Printf("Failed connecting to %s, retrying...\n", db.Server)
-		db.Connect()
-		return
+	// Creates connection to Twitch IRC server with retry and backoff
+	maxRetries := 10
+	for attempt := range maxRetries {
+		var err error
+		db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
+		if err == nil {
+			db.startTime = time.Now()
+			log.Printf("Connected to %s", db.Server)
+			return
+		}
+		backoff := time.Duration(attempt+1) * time.Second
+		log.Printf("Failed connecting to %s, retrying in %v...\n", db.Server, backoff)
+		time.Sleep(backoff)
 	}
 
-	// Record connection time
-	db.startTime = time.Now()
-	log.Printf("Connected to %s", db.Server)
-
+	log.Fatalf("Failed to connect to %s after %d attempts", db.Server, maxRetries)
 }
 
 func (db *DwarfBot) Disconnect() {
-	db.conn.Close()
+	if db.conn == nil {
+		return
+	}
+	if err := db.conn.Close(); err != nil {
+		log.Printf("Error closing connection: %v", err)
+	}
 	log.Printf("Connection closed; elapsed time %g", (time.Since(db.startTime).Seconds()))
 }
 
 func (db *DwarfBot) Authenticate() {
-	db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n"))
-	db.conn.Write([]byte("NICK " + db.Name + "\r\n"))
+	if _, err := db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n")); err != nil {
+		log.Printf("Failed to send PASS during authentication: %v", err)
+	}
+	if _, err := db.conn.Write([]byte("NICK " + db.Name + "\r\n")); err != nil {
+		log.Printf("Failed to send NICK during authentication: %v", err)
+	}
 }
 
 // JoinChannel joins a specific IRC Channel
@@ -178,7 +172,10 @@ func (db *DwarfBot) JoinChannel(channel string) {
 	}
 
 	// Channel login must be lowercase (https://dev.twitch.tv/docs/irc/guide#syntax-notes)
-	db.conn.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
+	if _, err := db.conn.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n")); err != nil {
+		log.Printf("Failed to join channel #%s: %v", channel, err)
+		return
+	}
 
 	log.Printf("Joined channel #%s as @%s", channel, db.Name)
 }
@@ -188,12 +185,19 @@ func (db *DwarfBot) PartChannel(channel string) {
 		return
 	}
 
-	db.conn.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n"))
+	if _, err := db.conn.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n")); err != nil {
+		log.Printf("Failed to part from channel #%s: %v", channel, err)
+		return
+	}
 	log.Printf("Parted from channel #%s", channel)
 }
 
 // Handle shutdown for good commands
 func (db *DwarfBot) Die(exitCode int) {
+	if db.exitFunc != nil {
+		db.exitFunc(exitCode)
+		return
+	}
 	os.Exit(exitCode)
 }
 
@@ -206,23 +210,21 @@ func (db *DwarfBot) HandleChat() error {
 		if err != nil {
 			db.Disconnect()
 
-			var errMsg string
-			if db.Verbose {
-				errMsg = fmt.Sprintf("(%s)", err)
-			}
-
-			return errors.New(fmt.Sprintf("Failed to read line from channel, disconnecting %s", errMsg))
+			return fmt.Errorf("failed to read line from channel, disconnecting: %w", err)
 		}
 
 		if db.Verbose {
 			log.Println(line)
 		}
 
-		if "PING :tmi.twitch.tv" == line {
+		if line == "PING :tmi.twitch.tv" {
 
 			// Must reply to PING messages with PONG message to stay connected
 			pong := "PONG :tmi.twitch.tv\r\n"
-			db.conn.Write([]byte(pong))
+			if _, err := db.conn.Write([]byte(pong)); err != nil {
+				db.Disconnect()
+				return fmt.Errorf("failed to write PONG to server, disconnecting: %w", err)
+			}
 			log.Print(pong)
 			continue
 
@@ -255,9 +257,8 @@ func (db *DwarfBot) HandleChat() error {
 							break
 						}
 
-						parseCommand(db, channelName, userName, cmd, arguments)
-						if err != nil {
-							return err
+						if cmdErr := parseCommand(db, channelName, userName, cmd, arguments); cmdErr != nil {
+							return cmdErr
 						}
 					}
 				default:
@@ -274,12 +275,34 @@ func (db *DwarfBot) Say(channelName, msg string) error {
 		return errors.New("msg was empty")
 	}
 
-	_, err := db.conn.Write([]byte(fmt.Sprintf("PRIVMSG #%s :%s\r\n", channelName, msg)))
-	log.Printf("%s #%s: %s", db.Name, channelName, msg)
-
+	_, err := fmt.Fprintf(db.conn, "PRIVMSG #%s :%s\r\n", channelName, msg)
 	if err != nil {
 		return err
 	}
+	log.Printf("%s #%s: %s", db.Name, channelName, msg)
 
 	return nil
+}
+
+// ChatPlatform interface implementation for DwarfBot (Twitch).
+
+func (db *DwarfBot) SendMessage(channel, msg string) error {
+	return db.Say(channel, msg)
+}
+
+func (db *DwarfBot) IsAdmin(channel, user string) bool {
+	return user == channel
+}
+
+func (db *DwarfBot) BotName() string {
+	return db.Name
+}
+
+func (db *DwarfBot) BotChannels() []string {
+	return db.Channels
+}
+
+func (db *DwarfBot) Shutdown(exitCode int) {
+	db.Disconnect()
+	db.Die(exitCode)
 }

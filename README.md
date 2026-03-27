@@ -1,12 +1,16 @@
 # dwarfbot
 
-The cheerful sidekick from [https://twitch.tv/hammerdwarf](https://twitch.tv/hammerdwarf), and Co.
+[![codecov](https://codecov.io/gh/clcollins/dwarfbot/graph/badge.svg)](https://codecov.io/gh/clcollins/dwarfbot)
+
+The cheerful sidekick from
+[https://twitch.tv/hammerdwarf](https://twitch.tv/hammerdwarf),
+and Co.
 
 ## Acknowledgements
 
-1. dwarfbot is (at least in some part) based on work from "[Building a Twitch.tv Chat Bot with
-   Go](https://dev.to/foresthoffman/building-a-twitchtv-chat-bot-with-go---part-1-i3k), by [Forest
-   Hoffman](https://github.com/foresthoffman).
+1. dwarfbot is (at least in some part) based on work from
+   "[Building a Twitch.tv Chat Bot with Go](https://dev.to/foresthoffman/building-a-twitchtv-chat-bot-with-go---part-1-i3k)",
+   by [Forest Hoffman](https://github.com/foresthoffman).
 
 ## License
 

@@ -1,17 +1,14 @@
-FROM docker.io/library/golang:1.15 as builder
+FROM registry.access.redhat.com/ubi9/go-toolset:1.25 as builder
 
-RUN mkdir /src
-WORKDIR /src
+COPY . .
 
-COPY . /src
-
-RUN go build -o out/dwarfbot
+RUN mkdir -p out && go build -buildvcs=false -o out/dwarfbot
 RUN out/dwarfbot --help
 
 
 # Build the final image
-FROM registry.access.redhat.com/ubi8/ubi-minimal
-COPY --from=builder /src/out/dwarfbot /dwarfbot
+FROM registry.access.redhat.com/ubi9/ubi-minimal
+COPY --from=builder /opt/app-root/src/out/dwarfbot /dwarfbot
 
 USER 1000
 ENTRYPOINT ["/dwarfbot"]

@@ -31,50 +31,52 @@ import (
 	"strings"
 )
 
-func parseAdminCommand(db *DwarfBot, channelName string, cmd string, arguments []string) error {
-	var err error
-
+func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, arguments []string) error {
 	switch cmd {
 	case "shutdown":
-		db.Say(channelName, "Yah, boss! Shuttin' 'er doon!")
-		db.Disconnect()
-		db.Die(0)
+		if err := platform.SendMessage(channelName, "Yah, boss! Shuttin' 'er doon!"); err != nil {
+			log.Printf("failed to send shutdown message to channel %s: %v", channelName, err)
+		}
+		platform.Shutdown(0)
 		return nil
 	}
-	return err
+	return nil
 }
 
-func parseCommand(db *DwarfBot, channelName string, userName string, cmd string, arguments []string) error {
-	var err error
-
-	if userName == channelName {
+func parseCommand(platform ChatPlatform, channelName string, userName string, cmd string, arguments []string) error {
+	if platform.IsAdmin(channelName, userName) {
 		log.Printf("Received orders from the boss...")
-		parseAdminCommand(db, channelName, cmd, arguments)
+		if err := parseAdminCommand(platform, channelName, cmd, arguments); err != nil {
+			return err
+		}
 	}
 
 	switch cmd {
 	case "ping":
-		ping(db, channelName, arguments)
+		return ping(platform, channelName, arguments)
 	case "channels":
-		channels(db, channelName, arguments)
-	}
-
-	return err
-}
-
-func ping(db *DwarfBot, channelName string, arguments []string) error {
-	re := regexp.MustCompile(`(?i)heyo.+`)
-
-	switch {
-	case contains(arguments, strings.ToLower("heyo")):
-		db.Say(channelName, "Heyo, yourself boy-o!")
-	case reContains(arguments, re):
-		db.Say(channelName, "Heyo, yourself boy-o!")
-	default:
-		db.Say(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
+		return channels(platform, channelName, arguments)
 	}
 
 	return nil
+}
+
+func ping(platform ChatPlatform, channelName string, arguments []string) error {
+	re := regexp.MustCompile(`(?i)heyo.+`)
+
+	lowerArgs := make([]string, len(arguments))
+	for i, a := range arguments {
+		lowerArgs[i] = strings.ToLower(a)
+	}
+
+	switch {
+	case contains(lowerArgs, "heyo"):
+		return platform.SendMessage(channelName, "Heyo, yourself boy-o!")
+	case reContains(lowerArgs, re):
+		return platform.SendMessage(channelName, "Heyo, yourself boy-o!")
+	default:
+		return platform.SendMessage(channelName, "Ach! I dunnae own 'n Atari, but nevertheless: \"Pong\"")
+	}
 }
 
 func reContains(list []string, re *regexp.Regexp) bool {
@@ -95,11 +97,10 @@ func contains(list []string, item string) bool {
 	return false
 }
 
-func channels(db *DwarfBot, channelName string, arguments []string) error {
-	msg := fmt.Sprintf("Aye, I like ta hang about here: %s", db.Name)
-	for _, channel := range db.Channels {
+func channels(platform ChatPlatform, channelName string, arguments []string) error {
+	msg := fmt.Sprintf("Aye, I like ta hang about here: %s", platform.BotName())
+	for _, channel := range platform.BotChannels() {
 		msg = msg + fmt.Sprintf(" %s", channel)
 	}
-	db.Say(channelName, msg)
-	return nil
+	return platform.SendMessage(channelName, msg)
 }

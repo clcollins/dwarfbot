@@ -69,9 +69,6 @@ type DwarfBot struct {
 	// OAuth credential for authentication
 	Credentials *OAuthCreds
 
-	// Rate-limit bot messages. 20/30 millisecond is OK
-	MsgRate time.Duration
-
 	// Name of the bot used in chat
 	Name string
 
@@ -126,26 +123,27 @@ func (db *DwarfBot) Start() {
 }
 
 func (db *DwarfBot) Connect() {
-	var err error
-
 	// Return if no server is specified
 	if db.Server == "" || db.Port == "" {
 		log.Fatalf("IRC server and port must be specified")
-		return
 	}
 
-	// Creates connection to Twitch IRC server
-	db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
-	if err != nil {
-		log.Printf("Failed connecting to %s, retrying...\n", db.Server)
-		db.Connect()
-		return
+	// Creates connection to Twitch IRC server with retry and backoff
+	maxRetries := 10
+	for attempt := range maxRetries {
+		var err error
+		db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
+		if err == nil {
+			db.startTime = time.Now()
+			log.Printf("Connected to %s", db.Server)
+			return
+		}
+		backoff := time.Duration(attempt+1) * time.Second
+		log.Printf("Failed connecting to %s, retrying in %v...\n", db.Server, backoff)
+		time.Sleep(backoff)
 	}
 
-	// Record connection time
-	db.startTime = time.Now()
-	log.Printf("Connected to %s", db.Server)
-
+	log.Fatalf("Failed to connect to %s after %d attempts", db.Server, maxRetries)
 }
 
 func (db *DwarfBot) Disconnect() {
@@ -212,10 +210,7 @@ func (db *DwarfBot) HandleChat() error {
 		if err != nil {
 			db.Disconnect()
 
-			if db.Verbose {
-				return fmt.Errorf("failed to read line from channel, disconnecting (%s)", err)
-			}
-			return fmt.Errorf("failed to read line from channel, disconnecting")
+			return fmt.Errorf("failed to read line from channel, disconnecting: %w", err)
 		}
 
 		if db.Verbose {
@@ -281,11 +276,10 @@ func (db *DwarfBot) Say(channelName, msg string) error {
 	}
 
 	_, err := fmt.Fprintf(db.conn, "PRIVMSG #%s :%s\r\n", channelName, msg)
-	log.Printf("%s #%s: %s", db.Name, channelName, msg)
-
 	if err != nil {
 		return err
 	}
+	log.Printf("%s #%s: %s", db.Name, channelName, msg)
 
 	return nil
 }

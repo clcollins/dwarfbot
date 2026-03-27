@@ -80,7 +80,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Build binary
-        run: go build -o out/dwarfbot .
+        run: mkdir -p out && go build -o out/dwarfbot .
       - name: Verify binary runs
         run: ./out/dwarfbot --help
 

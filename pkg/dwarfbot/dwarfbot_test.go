@@ -637,38 +637,20 @@ func TestHandleChat_Verbose(t *testing.T) {
 	}
 }
 
-func TestHandleChat_VerboseErrorMessage(t *testing.T) {
+func TestHandleChat_ErrorMessage(t *testing.T) {
 	bot, server, cleanup := newTestBot(t)
-	bot.Verbose = true
 	defer cleanup()
 
-	// Close immediately to trigger error with verbose message
+	// Close immediately to trigger error
 	_ = server.Close()
 
 	err := bot.HandleChat()
 	if err == nil {
 		t.Error("expected error after connection close")
 	}
-	// Verbose mode includes the underlying error in parentheses
-	if !strings.Contains(err.Error(), "(") {
-		t.Errorf("expected verbose error message with parentheses, got %q", err.Error())
-	}
-}
-
-func TestHandleChat_NonVerboseErrorMessage(t *testing.T) {
-	bot, server, cleanup := newTestBot(t)
-	bot.Verbose = false
-	defer cleanup()
-
-	_ = server.Close()
-
-	err := bot.HandleChat()
-	if err == nil {
-		t.Error("expected error after connection close")
-	}
-	// Non-verbose should not include underlying error details
-	if strings.Contains(err.Error(), "(") {
-		t.Errorf("expected non-verbose error without parentheses, got %q", err.Error())
+	// Error message should always include the underlying error
+	if !strings.Contains(err.Error(), "failed to read line from channel") {
+		t.Errorf("expected disconnect error message, got %q", err.Error())
 	}
 }
 

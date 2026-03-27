@@ -154,8 +154,12 @@ func (db *DwarfBot) Disconnect() {
 }
 
 func (db *DwarfBot) Authenticate() {
-	_, _ = db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n"))
-	_, _ = db.conn.Write([]byte("NICK " + db.Name + "\r\n"))
+	if _, err := db.conn.Write([]byte("PASS oauth:" + db.Credentials.Token + "\r\n")); err != nil {
+		log.Printf("Failed to send PASS during authentication: %v", err)
+	}
+	if _, err := db.conn.Write([]byte("NICK " + db.Name + "\r\n")); err != nil {
+		log.Printf("Failed to send NICK during authentication: %v", err)
+	}
 }
 
 // JoinChannel joins a specific IRC Channel
@@ -165,7 +169,10 @@ func (db *DwarfBot) JoinChannel(channel string) {
 	}
 
 	// Channel login must be lowercase (https://dev.twitch.tv/docs/irc/guide#syntax-notes)
-	_, _ = db.conn.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
+	if _, err := db.conn.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n")); err != nil {
+		log.Printf("Failed to join channel #%s: %v", channel, err)
+		return
+	}
 
 	log.Printf("Joined channel #%s as @%s", channel, db.Name)
 }
@@ -175,7 +182,10 @@ func (db *DwarfBot) PartChannel(channel string) {
 		return
 	}
 
-	_, _ = db.conn.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n"))
+	if _, err := db.conn.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n")); err != nil {
+		log.Printf("Failed to part from channel #%s: %v", channel, err)
+		return
+	}
 	log.Printf("Parted from channel #%s", channel)
 }
 
@@ -211,7 +221,10 @@ func (db *DwarfBot) HandleChat() error {
 
 			// Must reply to PING messages with PONG message to stay connected
 			pong := "PONG :tmi.twitch.tv\r\n"
-			_, _ = db.conn.Write([]byte(pong))
+			if _, err := db.conn.Write([]byte(pong)); err != nil {
+				db.Disconnect()
+				return fmt.Errorf("failed to write PONG to server, disconnecting: %w", err)
+			}
 			log.Print(pong)
 			continue
 

@@ -89,6 +89,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
       - name: Build container image
         run: podman build -f Containerfile -t ${{ env.IMAGE_NAME }}:ci .
 

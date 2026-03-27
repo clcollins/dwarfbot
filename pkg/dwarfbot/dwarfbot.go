@@ -149,6 +149,9 @@ func (db *DwarfBot) Connect() {
 }
 
 func (db *DwarfBot) Disconnect() {
+	if db.conn == nil {
+		return
+	}
 	if err := db.conn.Close(); err != nil {
 		log.Printf("Error closing connection: %v", err)
 	}

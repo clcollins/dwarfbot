@@ -148,9 +148,11 @@ func (d *DiscordBot) IsAdmin(channel, userID string) bool {
 				break
 			}
 		}
-		d.adminRoleMu.Lock()
-		d.adminRoleCache[ch.GuildID] = adminRoleID
-		d.adminRoleMu.Unlock()
+		if adminRoleID != "" {
+			d.adminRoleMu.Lock()
+			d.adminRoleCache[ch.GuildID] = adminRoleID
+			d.adminRoleMu.Unlock()
+		}
 	}
 
 	if adminRoleID == "" {

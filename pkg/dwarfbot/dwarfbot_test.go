@@ -855,5 +855,125 @@ func TestDwarfBot_Shutdown(t *testing.T) {
 	}
 }
 
+// --- Disconnect edge cases ---
+
+func TestDisconnect_NilConn(t *testing.T) {
+	bot := &DwarfBot{}
+	// Should not panic with nil conn
+	bot.Disconnect()
+}
+
+func TestDisconnect_DoubleClose(t *testing.T) {
+	_, client := net.Pipe()
+	bot := &DwarfBot{
+		conn:      client,
+		startTime: time.Now(),
+	}
+	// First close succeeds
+	bot.Disconnect()
+	// Second close on already-closed conn should log error but not panic
+	bot.conn = client // restore (already closed)
+	bot.Disconnect()
+}
+
+// --- Authenticate error paths ---
+
+func TestAuthenticate_ClosedConn(t *testing.T) {
+	_, client := net.Pipe()
+	_ = client.Close()
+	bot := &DwarfBot{
+		conn: client,
+		Name: "testbot",
+		Credentials: &OAuthCreds{
+			Token: "test_token",
+		},
+	}
+	// Should log errors but not panic
+	bot.Authenticate()
+}
+
+// --- JoinChannel error paths ---
+
+func TestJoinChannel_ClosedConn(t *testing.T) {
+	_, client := net.Pipe()
+	_ = client.Close()
+	bot := &DwarfBot{
+		conn: client,
+		Name: "testbot",
+	}
+	// Should log error and return without panic
+	bot.JoinChannel("testchannel")
+}
+
+// --- PartChannel error paths ---
+
+func TestPartChannel_ClosedConn(t *testing.T) {
+	_, client := net.Pipe()
+	_ = client.Close()
+	bot := &DwarfBot{
+		conn: client,
+		Name: "testbot",
+	}
+	// Should log error and return without panic
+	bot.PartChannel("testchannel")
+}
+
+// --- HandleChat PONG write error ---
+
+func TestHandleChat_PongWriteError(t *testing.T) {
+	server, client := net.Pipe()
+	bot := &DwarfBot{
+		conn:      client,
+		Name:      "testbot",
+		startTime: time.Now(),
+		exitFunc:  func(int) {},
+	}
+
+	go func() {
+		// Send PING then immediately close server so PONG write fails
+		_, _ = server.Write([]byte("PING :tmi.twitch.tv\r\n"))
+		// Give the bot time to process the PING
+		time.Sleep(50 * time.Millisecond)
+		_ = server.Close()
+	}()
+
+	err := bot.HandleChat()
+	// Should get an error - either PONG write fails or read fails
+	if err == nil {
+		t.Error("expected error when PONG write fails or connection closes")
+	}
+}
+
+// --- Shutdown with nil conn ---
+
+func TestDwarfBot_Shutdown_NilConn(t *testing.T) {
+	exitCalled := false
+	bot := &DwarfBot{
+		exitFunc: func(code int) {
+			exitCalled = true
+		},
+	}
+	// Should not panic with nil conn
+	bot.Shutdown(0)
+	if !exitCalled {
+		t.Error("expected exitFunc to be called")
+	}
+}
+
+// --- SendMessage via closed connection ---
+
+func TestDwarfBot_SendMessage_ClosedConn(t *testing.T) {
+	_, client := net.Pipe()
+	_ = client.Close()
+	bot := &DwarfBot{
+		conn: client,
+		Name: "testbot",
+	}
+	err := bot.SendMessage("ch", "hello")
+	if err == nil {
+		t.Error("expected error sending to closed connection")
+	}
+}
+
 // Verify DwarfBot satisfies ChatPlatform at compile time
 var _ ChatPlatform = (*DwarfBot)(nil)

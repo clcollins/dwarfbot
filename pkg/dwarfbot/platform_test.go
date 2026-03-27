@@ -441,3 +441,128 @@ func TestChatPlatform_Contract_DiscordBot(t *testing.T) {
 		t.Error("SendMessage: expected error without session")
 	}
 }
+
+// --- Additional DiscordBot coverage tests ---
+
+func TestDiscordBot_Shutdown_NilSession(t *testing.T) {
+	// Shutdown with nil session should not panic
+	exitCode := -1
+	bot := &DiscordBot{
+		exitFunc: func(code int) { exitCode = code },
+	}
+	bot.Shutdown(42)
+	if exitCode != 42 {
+		t.Errorf("expected exit code 42, got %d", exitCode)
+	}
+}
+
+func TestDiscordBot_Shutdown_NonZeroExitCode(t *testing.T) {
+	exitCode := -1
+	bot := &DiscordBot{
+		exitFunc: func(code int) { exitCode = code },
+	}
+	bot.Shutdown(1)
+	if exitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", exitCode)
+	}
+}
+
+func TestDiscordBot_IsAdmin_NilSession(t *testing.T) {
+	bot := &DiscordBot{
+		AdminRole: "admin",
+	}
+	// session is nil, should return false
+	if bot.IsAdmin("channel", "user") {
+		t.Error("expected IsAdmin false with nil session")
+	}
+}
+
+func TestDiscordBot_IsAdmin_EmptyAdminRole(t *testing.T) {
+	bot := &DiscordBot{
+		AdminRole: "",
+	}
+	if bot.IsAdmin("ch", "user") {
+		t.Error("expected IsAdmin false with empty admin role")
+	}
+}
+
+func TestDiscordBot_SendMessage_NilSession_ErrorMessage(t *testing.T) {
+	bot := &DiscordBot{Name: "testbot"}
+	err := bot.SendMessage("ch", "hello")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "session not initialized") {
+		t.Errorf("expected session error, got %q", err.Error())
+	}
+}
+
+func TestDiscordBot_Stop_NilSession_NoError(t *testing.T) {
+	bot := &DiscordBot{}
+	err := bot.Stop()
+	if err != nil {
+		t.Errorf("expected nil error from Stop with nil session, got %v", err)
+	}
+}
+
+func TestDiscordBot_BotChannels_Nil(t *testing.T) {
+	bot := &DiscordBot{}
+	ch := bot.BotChannels()
+	if ch != nil {
+		t.Errorf("expected nil channels, got %v", ch)
+	}
+}
+
+func TestDiscordBot_BotChannels_Multiple(t *testing.T) {
+	bot := &DiscordBot{ChannelIDs: []string{"a", "b", "c"}}
+	ch := bot.BotChannels()
+	if len(ch) != 3 {
+		t.Fatalf("expected 3 channels, got %d", len(ch))
+	}
+	if ch[0] != "a" || ch[1] != "b" || ch[2] != "c" {
+		t.Errorf("expected [a b c], got %v", ch)
+	}
+}
+
+// --- parseCommand coverage for admin non-shutdown ---
+
+func TestMockPlatform_AdminUnknownCommand(t *testing.T) {
+	mock := newMockPlatformWithAdmin("testbot", []string{"ch1"}, func(ch, user string) bool {
+		return user == "admin"
+	})
+
+	// Admin sends unknown admin command — should fall through to regular commands
+	_ = parseCommand(mock, "ch1", "admin", "nonexistent", []string{})
+
+	// No shutdown, no messages (unknown command)
+	if len(mock.shutdownLog) != 0 {
+		t.Errorf("expected no shutdown, got %v", mock.shutdownLog)
+	}
+	if len(mock.messages) != 0 {
+		t.Errorf("expected no messages for unknown command, got %d", len(mock.messages))
+	}
+}
+
+func TestMockPlatform_ParseCommand_PingCaseInsensitive(t *testing.T) {
+	mock := newMockPlatform("testbot", []string{"ch1"})
+	_ = parseCommand(mock, "ch1", "user", "ping", []string{"Heyo"})
+
+	if len(mock.messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(mock.messages))
+	}
+	if !strings.Contains(mock.messages[0].msg, "Heyo") {
+		t.Errorf("expected Heyo response for case-insensitive match, got %q", mock.messages[0].msg)
+	}
+}
+
+func TestMockPlatform_ParseCommand_PingHeyooooo(t *testing.T) {
+	mock := newMockPlatform("testbot", []string{"ch1"})
+	_ = parseCommand(mock, "ch1", "user", "ping", []string{"heyooooo"})
+
+	if len(mock.messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(mock.messages))
+	}
+	if !strings.Contains(mock.messages[0].msg, "Heyo") {
+		t.Errorf("expected Heyo response for extended heyo, got %q", mock.messages[0].msg)
+	}
+}

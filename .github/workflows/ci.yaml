@@ -65,11 +65,11 @@ jobs:
       - name: Run tests with race detector
         run: go test -v -count=1 -race ./...
       - name: Run tests with coverage
-        run: go test -coverprofile=coverage.out -count=1 ./...
-      - name: Upload coverage to Codecov
+        run: go test -coverprofile=coverage.txt -count=1 ./...
+      - name: Upload results to Codecov
         uses: codecov/codecov-action@v5
         with:
-          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   build:
     name: Go Build

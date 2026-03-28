@@ -1,6 +1,6 @@
 # dwarfbot
 
-[![codecov](https://codecov.io/gh/clcollins/dwarfbot/graph/badge.svg)](https://codecov.io/gh/clcollins/dwarfbot)
+[![codecov](https://codecov.io/gh/clcollins/dwarfbot/graph/badge.svg)](https://codecov.io/gh/clcollins/dwarfbot) [![Docker Repository on Quay](https://quay.io/repository/clcollins/dwarfbot/status "Docker Repository on Quay")](https://quay.io/repository/clcollins/dwarfbot)
 
 The cheerful sidekick from
 [https://twitch.tv/hammerdwarf](https://twitch.tv/hammerdwarf),

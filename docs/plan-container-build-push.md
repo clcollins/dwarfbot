@@ -190,7 +190,7 @@ to `clcollins/dwarfbot` only.
 
 | Risk                                                                       | Mitigation                                                                         |
 |----------------------------------------------------------------------------|------------------------------------------------------------------------------------|
-| QEMU arm64 emulation is slow (10-20 min)                                   | GHA layer caching; future optimization: Go cross-compilation in builder stage      |
+| QEMU arm64 emulation is slow (10-20 min)                                   | No caching currently; future: registry-based caching or Go cross-compilation       |
 | UBI go-toolset arm64 image might not exist for 1.25 tag                    | Verify availability; fallback: use `golang:1.25` for builder stage                 |
 | checkmake rejects Makefile changes                                         | Follow Makefile conventions checkmake expects                                      |
 | `--build-arg` values conflict with Containerfile LABEL defaults            | CI build-arg values override Containerfile ARG defaults (desired behavior)         |

@@ -92,20 +92,20 @@ jobs:
           SHORT_SHA="${{ steps.meta.outputs.short_sha }}"
           TAGS="${{ steps.meta.outputs.tags }}"
 
+          # Create manifest with both local architectures
+          podman manifest create "${FULL_IMAGE}:${SHORT_SHA}"
+          podman manifest add "${FULL_IMAGE}:${SHORT_SHA}" \
+            "containers-storage:${FULL_IMAGE}:${SHORT_SHA}-amd64"
+          podman manifest add "${FULL_IMAGE}:${SHORT_SHA}" \
+            "containers-storage:${FULL_IMAGE}:${SHORT_SHA}-arm64"
+
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "Pull request build - skipping manifest creation and push."
+            echo "Pull request build - manifest created locally; skipping registry push."
             echo "Tags that would be pushed: ${TAGS}"
             echo "Built images:"
             podman images --filter "reference=${FULL_IMAGE}" --format "{{.Repository}}:{{.Tag}}"
             exit 0
           fi
-
-          # Create manifest with both local architectures
-          podman manifest create ${FULL_IMAGE}:${SHORT_SHA}
-          podman manifest add ${FULL_IMAGE}:${SHORT_SHA} \
-            containers-storage:${FULL_IMAGE}:${SHORT_SHA}-amd64
-          podman manifest add ${FULL_IMAGE}:${SHORT_SHA} \
-            containers-storage:${FULL_IMAGE}:${SHORT_SHA}-arm64
 
           # Push the manifest under each tag
           for TAG in ${TAGS}; do

@@ -87,11 +87,12 @@ type DwarfBot struct {
 	// exitFunc is called by Die() to exit the process.
 	// Defaults to os.Exit if nil.
 	exitFunc func(int)
+
+	// Metrics records platform-level metrics. Nil means no metrics.
+	Metrics PlatformMetrics
 }
 
-func (db *DwarfBot) Start() {
-	var err error
-
+func (db *DwarfBot) Start() error {
 	defer db.Disconnect()
 
 	log.Println("dwarfbot is starting...")
@@ -101,7 +102,9 @@ func (db *DwarfBot) Start() {
 			log.Println("dwarfbot is waiting for a command...")
 		}
 
-		db.Connect()
+		if err := db.Connect(); err != nil {
+			return fmt.Errorf("twitch connection failed: %w", err)
+		}
 		db.Authenticate()
 
 		// Join the bot's channel
@@ -112,38 +115,45 @@ func (db *DwarfBot) Start() {
 			db.JoinChannel(channel)
 		}
 
-		err = db.HandleChat()
+		err := db.HandleChat()
 		if err != nil {
 			log.Println(err)
 			time.Sleep(time.Second)
 			log.Println("restarting bot...")
 		}
 	}
-
 }
 
-func (db *DwarfBot) Connect() {
-	// Return if no server is specified
+func (db *DwarfBot) Connect() error {
 	if db.Server == "" || db.Port == "" {
-		log.Fatalf("IRC server and port must be specified")
+		return fmt.Errorf("IRC server and port must be specified")
 	}
 
-	// Creates connection to Twitch IRC server with retry and backoff
 	maxRetries := 10
 	for attempt := range maxRetries {
+		if db.Metrics != nil {
+			db.Metrics.RecordConnectionAttempt("twitch", "attempting")
+		}
 		var err error
 		db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
 		if err == nil {
 			db.startTime = time.Now()
 			log.Printf("Connected to %s", db.Server)
-			return
+			if db.Metrics != nil {
+				db.Metrics.RecordConnectionAttempt("twitch", "success")
+				db.Metrics.RecordConnected("twitch")
+			}
+			return nil
+		}
+		if db.Metrics != nil {
+			db.Metrics.RecordConnectionAttempt("twitch", "failure")
 		}
 		backoff := time.Duration(attempt+1) * time.Second
 		log.Printf("Failed connecting to %s, retrying in %v...\n", db.Server, backoff)
 		time.Sleep(backoff)
 	}
 
-	log.Fatalf("Failed to connect to %s after %d attempts", db.Server, maxRetries)
+	return fmt.Errorf("failed to connect to %s after %d attempts", db.Server, maxRetries)
 }
 
 func (db *DwarfBot) Disconnect() {
@@ -153,7 +163,12 @@ func (db *DwarfBot) Disconnect() {
 	if err := db.conn.Close(); err != nil {
 		log.Printf("Error closing connection: %v", err)
 	}
-	log.Printf("Connection closed; elapsed time %g", (time.Since(db.startTime).Seconds()))
+	duration := time.Since(db.startTime)
+	log.Printf("Connection closed; elapsed time %g", duration.Seconds())
+	if db.Metrics != nil {
+		db.Metrics.RecordDisconnected("twitch", "closed")
+		db.Metrics.RecordConnectionDuration("twitch", duration)
+	}
 }
 
 func (db *DwarfBot) Authenticate() {
@@ -245,6 +260,9 @@ func (db *DwarfBot) HandleChat() error {
 				case "PRIVMSG":
 					msg := matches[4]
 					log.Printf("%s #%s: %s", userName, channelName, msg)
+					if db.Metrics != nil {
+						db.Metrics.RecordMessageReceived("twitch")
+					}
 
 					cmdMatches := cmdRegex.FindStringSubmatch(msg)
 					if cmdMatches != nil {
@@ -257,7 +275,7 @@ func (db *DwarfBot) HandleChat() error {
 							break
 						}
 
-						if cmdErr := parseCommand(db, channelName, userName, cmd, arguments); cmdErr != nil {
+						if cmdErr := parseCommand(db, channelName, userName, cmd, arguments, db.Metrics); cmdErr != nil {
 							return cmdErr
 						}
 					}
@@ -287,7 +305,15 @@ func (db *DwarfBot) Say(channelName, msg string) error {
 // ChatPlatform interface implementation for DwarfBot (Twitch).
 
 func (db *DwarfBot) SendMessage(channel, msg string) error {
-	return db.Say(channel, msg)
+	err := db.Say(channel, msg)
+	if db.Metrics != nil {
+		if err != nil {
+			db.Metrics.RecordMessageSent("twitch", "failure")
+		} else {
+			db.Metrics.RecordMessageSent("twitch", "success")
+		}
+	}
+	return err
 }
 
 func (db *DwarfBot) IsAdmin(channel, user string) bool {

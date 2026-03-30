@@ -25,12 +25,15 @@ package cmd
 
 import (
 	"dwarfbot/pkg/dwarfbot"
+	"dwarfbot/pkg/metrics"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -55,6 +58,7 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		name := viper.GetString("name")
 		verbose := viper.GetBool("verbose")
+		metricsPort := viper.GetString("metrics_port")
 
 		// Twitch config
 		twitchToken := viper.GetString("token")
@@ -74,32 +78,53 @@ var rootCmd = &cobra.Command{
 			log.Fatal("At least one platform must be configured (Twitch: token + channels, Discord: discord_token + discord_channels)")
 		}
 
-		// Start Discord bot if configured
+		// Initialize metrics
+		m := metrics.New()
+		m.Init("v0.3.0", time.Now())
+		m.SetConfigMetrics(twitchToken, discordToken, twitchChannels, discordChannels)
+		recorder := metrics.NewRecorder(m)
+
+		// Start metrics HTTP server
+		metricsSrv := metrics.NewServer(":"+metricsPort, m.Registry)
+		go func() {
+			log.Printf("Metrics server listening on :%s", metricsPort)
+			if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("Metrics server error: %v", err)
+			}
+		}()
+
+		// Start Discord bot if configured (non-fatal on failure)
 		var discordBot *dwarfbot.DiscordBot
+		discordRunning := false
 		if discordEnabled {
 			discordBot = &dwarfbot.DiscordBot{
 				Token:      discordToken,
 				ChannelIDs: discordChannels,
 				AdminRole:  discordAdminRole,
 				Name:       name,
+				Metrics:    recorder,
 			}
 
 			if err := discordBot.Start(); err != nil {
-				log.Fatalf("Failed to start Discord bot: %v", err)
+				log.Printf("WARNING: Failed to start Discord bot: %v", err)
+				discordBot = nil
+			} else {
+				discordRunning = true
+				defer func() {
+					if err := discordBot.Stop(); err != nil {
+						log.Printf("Failed to stop Discord bot: %v", err)
+					}
+				}()
+				log.Println("Discord bot is running")
 			}
-			defer func() {
-				if err := discordBot.Stop(); err != nil {
-					log.Printf("Failed to stop Discord bot: %v", err)
-				}
-			}()
-			log.Println("Discord bot is running")
 		}
 
-		// Handle graceful shutdown via signal for all modes
+		// Handle graceful shutdown via signal
 		sc := make(chan os.Signal, 1)
 		signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
 
-		// Start Twitch bot if configured (blocking, run in goroutine)
+		// Start Twitch bot if configured (non-fatal on failure)
+		twitchErrCh := make(chan error, 1)
 		if twitchEnabled {
 			bot := dwarfbot.DwarfBot{
 				Credentials: &dwarfbot.OAuthCreds{
@@ -111,14 +136,34 @@ var rootCmd = &cobra.Command{
 				Port:     port,
 				Channels: twitchChannels,
 				Name:     name,
+				Metrics:  recorder,
 			}
 
-			go bot.Start()
+			go func() {
+				twitchErrCh <- bot.Start()
+			}()
 		}
 
-		// Wait for interrupt signal
-		<-sc
-		log.Println("Shutting down...")
+		// Verify at least one platform started
+		if !discordRunning && !twitchEnabled {
+			log.Fatal("No platforms started successfully")
+		}
+
+		// Wait for signal or Twitch failure
+		select {
+		case <-sc:
+			log.Println("Shutting down...")
+		case err := <-twitchErrCh:
+			if err != nil {
+				log.Printf("Twitch bot exited with error: %v", err)
+				if !discordRunning {
+					log.Fatal("All platforms have failed, exiting")
+				}
+				log.Println("Continuing with Discord only")
+				<-sc
+				log.Println("Shutting down...")
+			}
+		}
 	},
 }
 
@@ -159,6 +204,10 @@ func init() {
 
 	rootCmd.PersistentFlags().String("discord-admin-role", "dwarfbot-admin", "Discord role name for admin commands")
 	cobra.CheckErr(viper.BindPFlag("discord_admin_role", rootCmd.PersistentFlags().Lookup("discord-admin-role")))
+
+	// Metrics configuration
+	rootCmd.PersistentFlags().String("metrics-port", "8080", "Port for Prometheus metrics HTTP server")
+	cobra.CheckErr(viper.BindPFlag("metrics_port", rootCmd.PersistentFlags().Lookup("metrics-port")))
 }
 
 // initConfig reads in config file and ENV variables if set.

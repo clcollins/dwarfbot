@@ -1,5 +1,19 @@
 package dwarfbot
 
+import "time"
+
+// PlatformMetrics provides hooks for recording platform-level metrics
+// without coupling to a specific metrics implementation.
+type PlatformMetrics interface {
+	RecordConnectionAttempt(platform, result string)
+	RecordConnected(platform string)
+	RecordDisconnected(platform, reason string)
+	RecordConnectionDuration(platform string, duration time.Duration)
+	RecordMessageReceived(platform string)
+	RecordMessageSent(platform, result string)
+	RecordCommandProcessed(platform, command, admin string)
+}
+
 // ChatPlatform abstracts a chat service (Twitch, Discord, etc.)
 // so that command handlers can work across platforms.
 type ChatPlatform interface {

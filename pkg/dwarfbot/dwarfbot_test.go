@@ -1250,6 +1250,46 @@ func TestStop_RecordsShutdownMetric(t *testing.T) {
 	}
 }
 
+func TestSetConn(t *testing.T) {
+	bot := &DwarfBot{}
+	server, client := net.Pipe()
+	defer func() { _ = server.Close() }()
+	defer func() { _ = client.Close() }()
+
+	bot.setConn(client)
+	bot.mu.Lock()
+	if bot.conn != client {
+		t.Error("expected conn to be set")
+	}
+	bot.mu.Unlock()
+}
+
+func TestStop_ClosesStopChannel(t *testing.T) {
+	bot := &DwarfBot{
+		stopCh: make(chan struct{}),
+	}
+	bot.Stop()
+
+	// stopCh should be closed
+	select {
+	case <-bot.stopCh:
+		// good, channel is closed
+	default:
+		t.Error("expected stopCh to be closed after Stop()")
+	}
+}
+
+func TestStop_DoubleStopSafe(t *testing.T) {
+	bot := &DwarfBot{
+		stopCh: make(chan struct{}),
+	}
+	bot.Stop()
+	bot.Stop() // should not panic
+	if !bot.isStopped() {
+		t.Error("expected stopped after double Stop()")
+	}
+}
+
 func TestSetDisconnectReason_DoesNotOverwriteShutdown(t *testing.T) {
 	bot := &DwarfBot{}
 	bot.Stop() // sets lastDisconnectReason = "shutdown"

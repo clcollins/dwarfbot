@@ -92,20 +92,25 @@ jobs:
           SHORT_SHA="${{ steps.meta.outputs.short_sha }}"
           TAGS="${{ steps.meta.outputs.tags }}"
 
-          # Create manifest with both architectures
-          podman manifest create ${FULL_IMAGE}:${SHORT_SHA} \
-            ${FULL_IMAGE}:${SHORT_SHA}-amd64 \
-            ${FULL_IMAGE}:${SHORT_SHA}-arm64
-
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            # Push manifest under each tag
-            for TAG in ${TAGS}; do
-              if [ "${TAG}" != "${FULL_IMAGE}:${SHORT_SHA}" ]; then
-                podman tag ${FULL_IMAGE}:${SHORT_SHA} "${TAG}"
-              fi
-              podman manifest push --all "${TAG}" "docker://${TAG}"
-            done
-          else
-            echo "Pull request build - skipping push."
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Pull request build - skipping manifest creation and push."
             echo "Tags that would be pushed: ${TAGS}"
+            echo "Built images:"
+            podman images --filter "reference=${FULL_IMAGE}" --format "{{.Repository}}:{{.Tag}}"
+            exit 0
           fi
+
+          # Create manifest with both local architectures
+          podman manifest create ${FULL_IMAGE}:${SHORT_SHA}
+          podman manifest add ${FULL_IMAGE}:${SHORT_SHA} \
+            containers-storage:${FULL_IMAGE}:${SHORT_SHA}-amd64
+          podman manifest add ${FULL_IMAGE}:${SHORT_SHA} \
+            containers-storage:${FULL_IMAGE}:${SHORT_SHA}-arm64
+
+          # Push manifest under each tag
+          for TAG in ${TAGS}; do
+            if [ "${TAG}" != "${FULL_IMAGE}:${SHORT_SHA}" ]; then
+              podman tag ${FULL_IMAGE}:${SHORT_SHA} "${TAG}"
+            fi
+            podman manifest push --all "${TAG}" "docker://${TAG}"
+          done

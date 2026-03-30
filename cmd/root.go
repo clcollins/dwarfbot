@@ -131,8 +131,9 @@ var rootCmd = &cobra.Command{
 
 		// Start Twitch bot if configured (non-fatal on failure)
 		twitchErrCh := make(chan error, 1)
+		var twitchBot *dwarfbot.DwarfBot
 		if twitchEnabled {
-			bot := dwarfbot.DwarfBot{
+			twitchBot = &dwarfbot.DwarfBot{
 				Credentials: &dwarfbot.OAuthCreds{
 					Name:  name,
 					Token: twitchToken,
@@ -146,7 +147,7 @@ var rootCmd = &cobra.Command{
 			}
 
 			go func() {
-				twitchErrCh <- bot.Start()
+				twitchErrCh <- twitchBot.Start()
 			}()
 		}
 
@@ -159,6 +160,15 @@ var rootCmd = &cobra.Command{
 		select {
 		case <-sc:
 			log.Println("Shutting down...")
+			if twitchBot != nil {
+				twitchBot.Stop()
+				// Wait for Twitch goroutine to finish (with timeout)
+				select {
+				case <-twitchErrCh:
+				case <-time.After(5 * time.Second):
+					log.Println("Twitch bot did not stop within timeout")
+				}
+			}
 		case err := <-twitchErrCh:
 			if err != nil {
 				log.Printf("Twitch bot exited with error: %v", err)

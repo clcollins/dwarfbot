@@ -1180,5 +1180,95 @@ func TestNormalizeCommandLabel(t *testing.T) {
 	}
 }
 
+// --- Stop / graceful shutdown tests ---
+
+func TestStop_SetsStoppedFlag(t *testing.T) {
+	bot := &DwarfBot{}
+	if bot.isStopped() {
+		t.Error("expected isStopped=false initially")
+	}
+	bot.Stop()
+	if !bot.isStopped() {
+		t.Error("expected isStopped=true after Stop()")
+	}
+}
+
+func TestStop_NilConn(t *testing.T) {
+	bot := &DwarfBot{}
+	// Should not panic with nil conn
+	bot.Stop()
+	if !bot.isStopped() {
+		t.Error("expected stopped after Stop()")
+	}
+}
+
+func TestStop_UnblocksHandleChat(t *testing.T) {
+	bot, _, cleanup := newTestBot(t)
+	defer cleanup()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- bot.HandleChat()
+	}()
+
+	// Give HandleChat time to start blocking on ReadLine
+	time.Sleep(50 * time.Millisecond)
+
+	bot.Stop()
+
+	select {
+	case err := <-errCh:
+		// HandleChat should return an error (connection closed)
+		if err == nil {
+			// This is also OK if isStopped was checked before the error
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("HandleChat did not return after Stop() within timeout")
+	}
+
+	if !bot.isStopped() {
+		t.Error("expected isStopped=true")
+	}
+}
+
+func TestStop_RecordsShutdownMetric(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	_, client := net.Pipe()
+	bot := &DwarfBot{
+		conn:      client,
+		startTime: time.Now(),
+		Metrics:   rec,
+	}
+
+	bot.Stop()
+
+	// The conn close triggers Disconnect via Start's defer in production,
+	// but here we manually verify the lastDisconnectReason was set
+	if bot.lastDisconnectReason != "shutdown" {
+		t.Errorf("expected lastDisconnectReason='shutdown', got %q", bot.lastDisconnectReason)
+	}
+}
+
+func TestStart_ReturnsNilOnStop(t *testing.T) {
+	bot := &DwarfBot{
+		Server: "localhost",
+		Port:   "6667",
+		Name:   "testbot",
+		Credentials: &OAuthCreds{
+			Name:  "testbot",
+			Token: "test_token",
+		},
+		exitFunc: func(int) {},
+	}
+
+	// Pre-set stopped so Start exits immediately
+	bot.Stop()
+
+	err := bot.Start()
+	if err != nil {
+		t.Errorf("expected nil error from Start() when pre-stopped, got %v", err)
+	}
+}
+
 // Verify DwarfBot satisfies ChatPlatform at compile time
 var _ ChatPlatform = (*DwarfBot)(nil)

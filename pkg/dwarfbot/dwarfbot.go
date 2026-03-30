@@ -33,6 +33,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -93,6 +94,28 @@ type DwarfBot struct {
 
 	// lastDisconnectReason tracks why the connection was lost for metrics.
 	lastDisconnectReason string
+
+	// mu protects stopped flag for concurrent access from Stop().
+	mu      sync.Mutex
+	stopped bool
+}
+
+// Stop signals the bot to shut down cleanly by closing the connection,
+// which unblocks any pending ReadLine() in HandleChat().
+func (db *DwarfBot) Stop() {
+	db.mu.Lock()
+	db.stopped = true
+	db.lastDisconnectReason = "shutdown"
+	db.mu.Unlock()
+	if db.conn != nil {
+		_ = db.conn.Close()
+	}
+}
+
+func (db *DwarfBot) isStopped() bool {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return db.stopped
 }
 
 func (db *DwarfBot) Start() error {
@@ -101,6 +124,11 @@ func (db *DwarfBot) Start() error {
 	log.Println("dwarfbot is starting...")
 
 	for {
+		if db.isStopped() {
+			log.Println("Twitch bot stopped")
+			return nil
+		}
+
 		if db.Verbose {
 			log.Println("dwarfbot is waiting for a command...")
 		}
@@ -120,6 +148,10 @@ func (db *DwarfBot) Start() error {
 
 		err := db.HandleChat()
 		if err != nil {
+			if db.isStopped() {
+				log.Println("Twitch bot stopped")
+				return nil
+			}
 			log.Println(err)
 			db.Disconnect()
 			time.Sleep(time.Second)

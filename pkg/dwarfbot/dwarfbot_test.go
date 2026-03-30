@@ -1180,5 +1180,148 @@ func TestNormalizeCommandLabel(t *testing.T) {
 	}
 }
 
+// --- Stop / graceful shutdown tests ---
+
+func TestStop_SetsStoppedFlag(t *testing.T) {
+	bot := &DwarfBot{}
+	if bot.isStopped() {
+		t.Error("expected isStopped=false initially")
+	}
+	bot.Stop()
+	if !bot.isStopped() {
+		t.Error("expected isStopped=true after Stop()")
+	}
+}
+
+func TestStop_NilConn(t *testing.T) {
+	bot := &DwarfBot{}
+	// Should not panic with nil conn
+	bot.Stop()
+	if !bot.isStopped() {
+		t.Error("expected stopped after Stop()")
+	}
+}
+
+func TestStop_UnblocksHandleChat(t *testing.T) {
+	bot, _, cleanup := newTestBot(t)
+	defer cleanup()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- bot.HandleChat()
+	}()
+
+	// Call Stop immediately — it closes the conn which unblocks ReadLine
+	bot.Stop()
+
+	select {
+	case <-errCh:
+		// HandleChat returned (error or nil, both OK)
+	case <-time.After(2 * time.Second):
+		t.Fatal("HandleChat did not return after Stop() within timeout")
+	}
+
+	if !bot.isStopped() {
+		t.Error("expected isStopped=true")
+	}
+}
+
+func TestStop_RecordsShutdownMetric(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	server, client := net.Pipe()
+	defer func() { _ = server.Close() }()
+	bot := &DwarfBot{
+		conn:      client,
+		startTime: time.Now(),
+		Metrics:   rec,
+	}
+
+	bot.Stop()
+	// Drive through Disconnect to trigger metric recording
+	bot.Disconnect()
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.disconnected) != 1 {
+		t.Fatalf("expected 1 disconnect metric, got %d", len(rec.disconnected))
+	}
+	if rec.disconnected[0].reason != "shutdown" {
+		t.Errorf("expected reason 'shutdown', got %q", rec.disconnected[0].reason)
+	}
+}
+
+func TestSetConn(t *testing.T) {
+	bot := &DwarfBot{}
+	server, client := net.Pipe()
+	defer func() { _ = server.Close() }()
+	defer func() { _ = client.Close() }()
+
+	bot.setConn(client)
+	bot.mu.Lock()
+	if bot.conn != client {
+		t.Error("expected conn to be set")
+	}
+	bot.mu.Unlock()
+}
+
+func TestStop_ClosesStopChannel(t *testing.T) {
+	bot := &DwarfBot{
+		stopCh: make(chan struct{}),
+	}
+	bot.Stop()
+
+	// stopCh should be closed
+	select {
+	case <-bot.stopCh:
+		// good, channel is closed
+	default:
+		t.Error("expected stopCh to be closed after Stop()")
+	}
+}
+
+func TestStop_DoubleStopSafe(t *testing.T) {
+	bot := &DwarfBot{
+		stopCh: make(chan struct{}),
+	}
+	bot.Stop()
+	bot.Stop() // should not panic
+	if !bot.isStopped() {
+		t.Error("expected stopped after double Stop()")
+	}
+}
+
+func TestSetDisconnectReason_DoesNotOverwriteShutdown(t *testing.T) {
+	bot := &DwarfBot{}
+	bot.Stop() // sets lastDisconnectReason = "shutdown"
+	bot.setDisconnectReason("read_error")
+
+	bot.mu.Lock()
+	defer bot.mu.Unlock()
+	if bot.lastDisconnectReason != "shutdown" {
+		t.Errorf("expected 'shutdown' preserved, got %q", bot.lastDisconnectReason)
+	}
+}
+
+func TestStart_ReturnsNilOnStop(t *testing.T) {
+	bot := &DwarfBot{
+		Server: "localhost",
+		Port:   "6667",
+		Name:   "testbot",
+		Credentials: &OAuthCreds{
+			Name:  "testbot",
+			Token: "test_token",
+		},
+		exitFunc: func(int) {},
+	}
+
+	// Pre-set stopped so Start exits immediately
+	bot.Stop()
+
+	err := bot.Start()
+	if err != nil {
+		t.Errorf("expected nil error from Start() when pre-stopped, got %v", err)
+	}
+}
+
 // Verify DwarfBot satisfies ChatPlatform at compile time
 var _ ChatPlatform = (*DwarfBot)(nil)

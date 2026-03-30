@@ -1211,17 +1211,12 @@ func TestStop_UnblocksHandleChat(t *testing.T) {
 		errCh <- bot.HandleChat()
 	}()
 
-	// Give HandleChat time to start blocking on ReadLine
-	time.Sleep(50 * time.Millisecond)
-
+	// Call Stop immediately — it closes the conn which unblocks ReadLine
 	bot.Stop()
 
 	select {
-	case err := <-errCh:
-		// HandleChat should return an error (connection closed)
-		if err == nil {
-			// This is also OK if isStopped was checked before the error
-		}
+	case <-errCh:
+		// HandleChat returned (error or nil, both OK)
 	case <-time.After(2 * time.Second):
 		t.Fatal("HandleChat did not return after Stop() within timeout")
 	}
@@ -1233,7 +1228,8 @@ func TestStop_UnblocksHandleChat(t *testing.T) {
 
 func TestStop_RecordsShutdownMetric(t *testing.T) {
 	rec := newMockMetricsRecorder()
-	_, client := net.Pipe()
+	server, client := net.Pipe()
+	defer func() { _ = server.Close() }()
 	bot := &DwarfBot{
 		conn:      client,
 		startTime: time.Now(),
@@ -1241,11 +1237,28 @@ func TestStop_RecordsShutdownMetric(t *testing.T) {
 	}
 
 	bot.Stop()
+	// Drive through Disconnect to trigger metric recording
+	bot.Disconnect()
 
-	// The conn close triggers Disconnect via Start's defer in production,
-	// but here we manually verify the lastDisconnectReason was set
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.disconnected) != 1 {
+		t.Fatalf("expected 1 disconnect metric, got %d", len(rec.disconnected))
+	}
+	if rec.disconnected[0].reason != "shutdown" {
+		t.Errorf("expected reason 'shutdown', got %q", rec.disconnected[0].reason)
+	}
+}
+
+func TestSetDisconnectReason_DoesNotOverwriteShutdown(t *testing.T) {
+	bot := &DwarfBot{}
+	bot.Stop() // sets lastDisconnectReason = "shutdown"
+	bot.setDisconnectReason("read_error")
+
+	bot.mu.Lock()
+	defer bot.mu.Unlock()
 	if bot.lastDisconnectReason != "shutdown" {
-		t.Errorf("expected lastDisconnectReason='shutdown', got %q", bot.lastDisconnectReason)
+		t.Errorf("expected 'shutdown' preserved, got %q", bot.lastDisconnectReason)
 	}
 }
 

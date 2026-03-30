@@ -95,7 +95,8 @@ type DwarfBot struct {
 	// lastDisconnectReason tracks why the connection was lost for metrics.
 	lastDisconnectReason string
 
-	// mu protects stopped flag for concurrent access from Stop().
+	// mu protects stopped, lastDisconnectReason, and conn for
+	// concurrent access between the bot goroutine and Stop().
 	mu      sync.Mutex
 	stopped bool
 }
@@ -106,9 +107,10 @@ func (db *DwarfBot) Stop() {
 	db.mu.Lock()
 	db.stopped = true
 	db.lastDisconnectReason = "shutdown"
+	conn := db.conn
 	db.mu.Unlock()
-	if db.conn != nil {
-		_ = db.conn.Close()
+	if conn != nil {
+		_ = conn.Close()
 	}
 }
 
@@ -116,6 +118,15 @@ func (db *DwarfBot) isStopped() bool {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.stopped
+}
+
+func (db *DwarfBot) setDisconnectReason(reason string) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	// Don't overwrite "shutdown" with an error reason
+	if db.lastDisconnectReason != "shutdown" {
+		db.lastDisconnectReason = reason
+	}
 }
 
 func (db *DwarfBot) Start() error {
@@ -167,6 +178,9 @@ func (db *DwarfBot) Connect() error {
 
 	maxRetries := 10
 	for attempt := range maxRetries {
+		if db.isStopped() {
+			return fmt.Errorf("connect aborted: bot is stopping")
+		}
 		var err error
 		db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
 		if err == nil {
@@ -201,13 +215,15 @@ func (db *DwarfBot) Disconnect() {
 	duration := time.Since(db.startTime)
 	log.Printf("Connection closed; elapsed time %g", duration.Seconds())
 	if db.Metrics != nil {
+		db.mu.Lock()
 		reason := "shutdown"
 		if db.lastDisconnectReason != "" {
 			reason = db.lastDisconnectReason
 		}
+		db.lastDisconnectReason = ""
+		db.mu.Unlock()
 		db.Metrics.RecordDisconnected("twitch", reason)
 		db.Metrics.RecordConnectionDuration("twitch", duration)
-		db.lastDisconnectReason = ""
 	}
 }
 
@@ -263,7 +279,7 @@ func (db *DwarfBot) HandleChat() error {
 	for {
 		line, err := tp.ReadLine()
 		if err != nil {
-			db.lastDisconnectReason = "read_error"
+			db.setDisconnectReason("read_error")
 			db.Disconnect()
 
 			return fmt.Errorf("failed to read line from channel, disconnecting: %w", err)
@@ -278,7 +294,7 @@ func (db *DwarfBot) HandleChat() error {
 			// Must reply to PING messages with PONG message to stay connected
 			pong := "PONG :tmi.twitch.tv\r\n"
 			if _, err := db.conn.Write([]byte(pong)); err != nil {
-				db.lastDisconnectReason = "write_error"
+				db.setDisconnectReason("write_error")
 				db.Disconnect()
 				return fmt.Errorf("failed to write PONG to server, disconnecting: %w", err)
 			}

@@ -975,5 +975,173 @@ func TestDwarfBot_SendMessage_ClosedConn(t *testing.T) {
 	}
 }
 
+// --- Metrics integration tests ---
+
+func TestDwarfBot_Disconnect_RecordsMetrics(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	_, client := net.Pipe()
+	bot := &DwarfBot{
+		conn:      client,
+		startTime: time.Now().Add(-5 * time.Second),
+		Metrics:   rec,
+	}
+
+	bot.Disconnect()
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.disconnected) != 1 {
+		t.Fatalf("expected 1 disconnect recorded, got %d", len(rec.disconnected))
+	}
+	if rec.disconnected[0].platform != "twitch" {
+		t.Errorf("expected platform 'twitch', got %q", rec.disconnected[0].platform)
+	}
+	if rec.disconnected[0].reason != "shutdown" {
+		t.Errorf("expected reason 'shutdown', got %q", rec.disconnected[0].reason)
+	}
+	if len(rec.connectionDurations) != 1 {
+		t.Fatalf("expected 1 duration recorded, got %d", len(rec.connectionDurations))
+	}
+}
+
+func TestDwarfBot_Disconnect_ErrorReason(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	_, client := net.Pipe()
+	bot := &DwarfBot{
+		conn:                 client,
+		startTime:            time.Now(),
+		Metrics:              rec,
+		lastDisconnectReason: "read_error",
+	}
+
+	bot.Disconnect()
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if rec.disconnected[0].reason != "read_error" {
+		t.Errorf("expected reason 'read_error', got %q", rec.disconnected[0].reason)
+	}
+}
+
+func TestDwarfBot_SendMessage_RecordsSuccessMetric(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	bot, server, cleanup := newTestBot(t)
+	bot.Metrics = rec
+	defer cleanup()
+
+	go func() {
+		if err := bot.SendMessage("testchannel", "hello"); err != nil {
+			t.Errorf("SendMessage error: %v", err)
+		}
+	}()
+
+	_ = readFromConn(t, server)
+
+	// Give goroutine time to complete metric recording
+	time.Sleep(50 * time.Millisecond)
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.messagesSent) != 1 {
+		t.Fatalf("expected 1 message sent metric, got %d", len(rec.messagesSent))
+	}
+	if rec.messagesSent[0].result != "success" {
+		t.Errorf("expected result 'success', got %q", rec.messagesSent[0].result)
+	}
+}
+
+func TestDwarfBot_SendMessage_RecordsFailureMetric(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	_, client := net.Pipe()
+	_ = client.Close()
+	bot := &DwarfBot{
+		conn:    client,
+		Name:    "testbot",
+		Metrics: rec,
+	}
+
+	_ = bot.SendMessage("ch", "hello")
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.messagesSent) != 1 {
+		t.Fatalf("expected 1 message sent metric, got %d", len(rec.messagesSent))
+	}
+	if rec.messagesSent[0].result != "failure" {
+		t.Errorf("expected result 'failure', got %q", rec.messagesSent[0].result)
+	}
+}
+
+func TestDwarfBot_HandleChat_RecordsMessageReceived(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	bot, server, cleanup := newTestBot(t)
+	bot.Metrics = rec
+	defer cleanup()
+
+	go func() {
+		line := ":someuser!someuser@someuser.tmi.twitch.tv PRIVMSG #testchannel :!dwarfbot ping\r\n"
+		_, _ = server.Write([]byte(line))
+		// Read the response
+		buf := make([]byte, 4096)
+		_ = server.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		_, _ = server.Read(buf)
+		_ = server.Close()
+	}()
+
+	_ = bot.HandleChat()
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.messagesReceived) == 0 {
+		t.Error("expected message received metric to be recorded")
+	}
+}
+
+func TestParseCommand_RecordsCommandMetric(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	mock := newMockPlatform("testbot", []string{"ch1"})
+
+	_ = parseCommand(mock, "ch1", "user", "ping", []string{}, parseCommandOpts{
+		metrics:      rec,
+		platformName: "twitch",
+	})
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.commandsProcessed) != 1 {
+		t.Fatalf("expected 1 command metric, got %d", len(rec.commandsProcessed))
+	}
+	if rec.commandsProcessed[0].platform != "twitch" {
+		t.Errorf("expected platform 'twitch', got %q", rec.commandsProcessed[0].platform)
+	}
+	if rec.commandsProcessed[0].command != "ping" {
+		t.Errorf("expected command 'ping', got %q", rec.commandsProcessed[0].command)
+	}
+	if rec.commandsProcessed[0].admin != "false" {
+		t.Errorf("expected admin 'false', got %q", rec.commandsProcessed[0].admin)
+	}
+}
+
+func TestParseCommand_RecordsAdminMetric(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	mock := newMockPlatformWithAdmin("testbot", []string{"ch1"}, func(ch, user string) bool {
+		return user == "admin"
+	})
+
+	_ = parseCommand(mock, "ch1", "admin", "ping", []string{}, parseCommandOpts{
+		metrics:      rec,
+		platformName: "discord",
+	})
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.commandsProcessed) != 1 {
+		t.Fatalf("expected 1 command metric, got %d", len(rec.commandsProcessed))
+	}
+	if rec.commandsProcessed[0].admin != "true" {
+		t.Errorf("expected admin 'true', got %q", rec.commandsProcessed[0].admin)
+	}
+}
+
 // Verify DwarfBot satisfies ChatPlatform at compile time
 var _ ChatPlatform = (*DwarfBot)(nil)

@@ -70,7 +70,6 @@ PrometheusRule CR for OpenShift with:
 
 - `DwarfBotPlatformDown` — disconnected > 5m (warning)
 - `DwarfBotAllPlatformsDown` — all down > 2m (critical)
-- `DwarfBotTokenMissing` — no token > 10m (warning)
 - `DwarfBotHighMessageFailureRate` — > 10% failure (warning)
 
 **SLO** (99.9% uptime per platform):

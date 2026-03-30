@@ -64,7 +64,7 @@ image-build:
 		-t $(IMAGE_STRING):$(GIT_SHA) -t $(IMAGE_STRING):latest .
 
 .PHONY: image-push
-image-push:
+image-push: image-build
 	$(CONTAINER_SUBSYS) push $(IMAGE_STRING):$(GIT_SHA)
 	$(CONTAINER_SUBSYS) push $(IMAGE_STRING):latest
 

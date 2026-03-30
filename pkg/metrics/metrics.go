@@ -163,4 +163,9 @@ func (m *Metrics) SetConfigMetrics(twitchToken, discordToken string, twitchChann
 	}
 	setPresent("twitch", twitchToken, twitchChannels)
 	setPresent("discord", discordToken, discordChannels)
+
+	// Initialize connected gauge to 0 so alerting rules work even
+	// if a platform never connects.
+	m.PlatformConnected.WithLabelValues("twitch").Set(0)
+	m.PlatformConnected.WithLabelValues("discord").Set(0)
 }

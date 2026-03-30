@@ -35,7 +35,7 @@ spec:
 
         # Token not configured for a platform
         - alert: DwarfBotTokenMissing
-          expr: dwarfbot_platform_token_present == 0
+          expr: dwarfbot_platform_token_present == 0 and dwarfbot_platform_configured == 1
           for: 10m
           labels:
             severity: warning

@@ -55,7 +55,10 @@ func TestRecorder_RecordConnectionDuration(t *testing.T) {
 
 	r.RecordConnectionDuration("twitch", 30*time.Second)
 
-	families, _ := m.Registry.Gather()
+	families, err := m.Registry.Gather()
+	if err != nil {
+		t.Fatalf("failed to gather metrics: %v", err)
+	}
 	for _, fam := range families {
 		if fam.GetName() == "dwarfbot_platform_connection_duration_seconds" {
 			if len(fam.GetMetric()) == 0 {

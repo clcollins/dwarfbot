@@ -26,7 +26,10 @@ func TestServeMux_MetricsEndpoint(t *testing.T) {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
 	bodyStr := string(body)
 
 	// Only check for metrics that have been observed (twitch connected was set above)
@@ -56,7 +59,10 @@ func TestServeMux_HealthzEndpoint(t *testing.T) {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
 	if strings.TrimSpace(string(body)) != "ok" {
 		t.Errorf("expected 'ok', got %q", string(body))
 	}
@@ -74,7 +80,10 @@ func TestServeMux_MetricsContainsGoCollector(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
 	if !strings.Contains(string(body), "go_goroutines") {
 		t.Error("expected Go runtime metrics (go_goroutines) in output")
 	}

@@ -55,7 +55,10 @@ func TestInit_SetsInfoGauge(t *testing.T) {
 	m := New()
 	m.Init("v0.2.0", time.Now())
 
-	families, _ := m.Registry.Gather()
+	families, err := m.Registry.Gather()
+	if err != nil {
+		t.Fatalf("failed to gather metrics: %v", err)
+	}
 	for _, fam := range families {
 		if fam.GetName() == "dwarfbot_info" {
 			if len(fam.GetMetric()) == 0 {
@@ -81,7 +84,10 @@ func TestInit_RegistersUptimeMetric(t *testing.T) {
 	start := time.Now().Add(-10 * time.Second)
 	m.Init("test", start)
 
-	families, _ := m.Registry.Gather()
+	families, err := m.Registry.Gather()
+	if err != nil {
+		t.Fatalf("failed to gather metrics: %v", err)
+	}
 	for _, fam := range families {
 		if fam.GetName() == "dwarfbot_uptime_seconds" {
 			val := fam.GetMetric()[0].GetGauge().GetValue()

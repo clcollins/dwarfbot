@@ -49,9 +49,9 @@ spec:
         - alert: DwarfBotHighMessageFailureRate
           expr: >-
             (
-              rate(dwarfbot_messages_sent_total{result="failure"}[5m])
+              sum by(platform)(rate(dwarfbot_messages_sent_total{result="failure"}[5m]))
               /
-              (rate(dwarfbot_messages_sent_total[5m]) > 0)
+              (sum by(platform)(rate(dwarfbot_messages_sent_total[5m])) > 0)
             ) > 0.1
           for: 5m
           labels:

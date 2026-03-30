@@ -43,7 +43,13 @@ func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, ar
 	return nil
 }
 
-func parseCommand(platform ChatPlatform, channelName string, userName string, cmd string, arguments []string, platformMetrics ...PlatformMetrics) error {
+// parseCommandOpts holds optional parameters for parseCommand.
+type parseCommandOpts struct {
+	metrics      PlatformMetrics
+	platformName string
+}
+
+func parseCommand(platform ChatPlatform, channelName string, userName string, cmd string, arguments []string, opts ...parseCommandOpts) error {
 	isAdmin := platform.IsAdmin(channelName, userName)
 	if isAdmin {
 		log.Printf("Received orders from the boss...")
@@ -52,13 +58,12 @@ func parseCommand(platform ChatPlatform, channelName string, userName string, cm
 		}
 	}
 
-	// Record command metric if a metrics recorder was provided
-	if len(platformMetrics) > 0 && platformMetrics[0] != nil {
+	if len(opts) > 0 && opts[0].metrics != nil {
 		adminStr := "false"
 		if isAdmin {
 			adminStr = "true"
 		}
-		platformMetrics[0].RecordCommandProcessed(platform.BotName(), cmd, adminStr)
+		opts[0].metrics.RecordCommandProcessed(opts[0].platformName, cmd, adminStr)
 	}
 
 	switch cmd {

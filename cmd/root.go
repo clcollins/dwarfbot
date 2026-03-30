@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -79,8 +80,12 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Initialize metrics
+		version := "dev"
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+			version = info.Main.Version
+		}
 		m := metrics.New()
-		m.Init("v0.3.0", time.Now())
+		m.Init(version, time.Now())
 		m.SetConfigMetrics(twitchToken, discordToken, twitchChannels, discordChannels)
 		recorder := metrics.NewRecorder(m)
 

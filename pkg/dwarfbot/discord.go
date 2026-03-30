@@ -42,10 +42,6 @@ type DiscordBot struct {
 
 // Start creates the Discord session, registers handlers, and opens the connection.
 func (d *DiscordBot) Start() error {
-	if d.Metrics != nil {
-		d.Metrics.RecordConnectionAttempt("discord", "attempting")
-	}
-
 	var err error
 	d.session, err = discordgo.New("Bot " + d.Token)
 	if err != nil {
@@ -124,7 +120,7 @@ func (d *DiscordBot) messageHandler(s *discordgo.Session, m *discordgo.MessageCr
 		d.Metrics.RecordMessageReceived("discord")
 	}
 
-	if err := parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments, d.Metrics); err != nil {
+	if err := parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments, parseCommandOpts{metrics: d.Metrics, platformName: "discord"}); err != nil {
 		log.Printf("Discord: error handling command %q from user %s in channel %s: %v", cmd, m.Author.ID, m.ChannelID, err)
 	}
 }

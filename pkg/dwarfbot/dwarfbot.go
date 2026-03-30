@@ -131,9 +131,6 @@ func (db *DwarfBot) Connect() error {
 
 	maxRetries := 10
 	for attempt := range maxRetries {
-		if db.Metrics != nil {
-			db.Metrics.RecordConnectionAttempt("twitch", "attempting")
-		}
 		var err error
 		db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
 		if err == nil {
@@ -275,7 +272,7 @@ func (db *DwarfBot) HandleChat() error {
 							break
 						}
 
-						if cmdErr := parseCommand(db, channelName, userName, cmd, arguments, db.Metrics); cmdErr != nil {
+						if cmdErr := parseCommand(db, channelName, userName, cmd, arguments, parseCommandOpts{metrics: db.Metrics, platformName: "twitch"}); cmdErr != nil {
 							return cmdErr
 						}
 					}

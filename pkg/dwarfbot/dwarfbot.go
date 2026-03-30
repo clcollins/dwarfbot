@@ -90,6 +90,9 @@ type DwarfBot struct {
 
 	// Metrics records platform-level metrics. Nil means no metrics.
 	Metrics PlatformMetrics
+
+	// lastDisconnectReason tracks why the connection was lost for metrics.
+	lastDisconnectReason string
 }
 
 func (db *DwarfBot) Start() error {
@@ -153,6 +156,8 @@ func (db *DwarfBot) Connect() error {
 	return fmt.Errorf("failed to connect to %s after %d attempts", db.Server, maxRetries)
 }
 
+// disconnectReason tracks why the last disconnect happened.
+// Set by HandleChat error paths before Disconnect is called via Start()'s defer.
 func (db *DwarfBot) Disconnect() {
 	if db.conn == nil {
 		return
@@ -163,8 +168,13 @@ func (db *DwarfBot) Disconnect() {
 	duration := time.Since(db.startTime)
 	log.Printf("Connection closed; elapsed time %g", duration.Seconds())
 	if db.Metrics != nil {
-		db.Metrics.RecordDisconnected("twitch", "closed")
+		reason := "shutdown"
+		if db.lastDisconnectReason != "" {
+			reason = db.lastDisconnectReason
+		}
+		db.Metrics.RecordDisconnected("twitch", reason)
 		db.Metrics.RecordConnectionDuration("twitch", duration)
+		db.lastDisconnectReason = "" // reset for next connection
 	}
 }
 
@@ -220,6 +230,7 @@ func (db *DwarfBot) HandleChat() error {
 	for {
 		line, err := tp.ReadLine()
 		if err != nil {
+			db.lastDisconnectReason = "read_error"
 			db.Disconnect()
 
 			return fmt.Errorf("failed to read line from channel, disconnecting: %w", err)
@@ -234,6 +245,7 @@ func (db *DwarfBot) HandleChat() error {
 			// Must reply to PING messages with PONG message to stay connected
 			pong := "PONG :tmi.twitch.tv\r\n"
 			if _, err := db.conn.Write([]byte(pong)); err != nil {
+				db.lastDisconnectReason = "write_error"
 				db.Disconnect()
 				return fmt.Errorf("failed to write PONG to server, disconnecting: %w", err)
 			}

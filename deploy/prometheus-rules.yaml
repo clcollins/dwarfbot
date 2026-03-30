@@ -33,18 +33,6 @@ spec:
               No chat platforms are currently connected. The bot is
               effectively offline.
 
-        # Token not configured for a platform
-        - alert: DwarfBotTokenMissing
-          expr: dwarfbot_platform_token_present == 0 and dwarfbot_platform_configured == 1
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: "DwarfBot {{ $labels.platform }} token is not configured"
-            description: >-
-              No token is configured for the {{ $labels.platform }}
-              platform. The bot cannot connect to this platform.
-
         # High message send failure rate
         - alert: DwarfBotHighMessageFailureRate
           expr: >-

@@ -24,6 +24,7 @@ SOFTWARE.
 package cmd
 
 import (
+	"context"
 	"dwarfbot/pkg/dwarfbot"
 	"dwarfbot/pkg/metrics"
 	"errors"
@@ -168,6 +169,13 @@ var rootCmd = &cobra.Command{
 				<-sc
 				log.Println("Shutting down...")
 			}
+		}
+
+		// Gracefully shut down metrics server
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := metricsSrv.Shutdown(ctx); err != nil {
+			log.Printf("Metrics server shutdown error: %v", err)
 		}
 	},
 }

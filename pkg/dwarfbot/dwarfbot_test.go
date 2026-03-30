@@ -1029,16 +1029,16 @@ func TestDwarfBot_SendMessage_RecordsSuccessMetric(t *testing.T) {
 	bot.Metrics = rec
 	defer cleanup()
 
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		if err := bot.SendMessage("testchannel", "hello"); err != nil {
 			t.Errorf("SendMessage error: %v", err)
 		}
 	}()
 
 	_ = readFromConn(t, server)
-
-	// Give goroutine time to complete metric recording
-	time.Sleep(50 * time.Millisecond)
+	<-done
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()

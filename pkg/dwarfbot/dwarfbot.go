@@ -157,8 +157,7 @@ func (db *DwarfBot) Connect() error {
 	return fmt.Errorf("failed to connect to %s after %d attempts", db.Server, maxRetries)
 }
 
-// disconnectReason tracks why the last disconnect happened.
-// Set by HandleChat error paths before Disconnect is called via Start()'s defer.
+// Disconnect closes the IRC connection. Safe to call multiple times.
 func (db *DwarfBot) Disconnect() {
 	if db.conn == nil {
 		return
@@ -166,6 +165,7 @@ func (db *DwarfBot) Disconnect() {
 	if err := db.conn.Close(); err != nil {
 		log.Printf("Error closing connection: %v", err)
 	}
+	db.conn = nil // prevent double-close
 	duration := time.Since(db.startTime)
 	log.Printf("Connection closed; elapsed time %g", duration.Seconds())
 	if db.Metrics != nil {
@@ -175,7 +175,7 @@ func (db *DwarfBot) Disconnect() {
 		}
 		db.Metrics.RecordDisconnected("twitch", reason)
 		db.Metrics.RecordConnectionDuration("twitch", duration)
-		db.lastDisconnectReason = "" // reset for next connection
+		db.lastDisconnectReason = ""
 	}
 }
 

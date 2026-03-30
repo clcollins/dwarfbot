@@ -70,11 +70,11 @@ on:
 
 Tag strategy via `docker/metadata-action`:
 
-| Event | Tags generated |
-|-------|----------------|
-| PR #22 | `pr-22`, `abc1234` (build only) |
-| Push to main | `latest`, `abc1234` |
-| Tag v0.2.0 | `v0.2.0`, `0.2.0`, `abc1234` |
+| Event        | Tags generated                    |
+|--------------|-----------------------------------|
+| PR #22       | `pr-22`, `abc1234` (build only)   |
+| Push to main | `latest`, `abc1234`               |
+| Tag v0.2.0   | `v0.2.0`, `0.2.0`, `abc1234`     |
 
 Push is conditional: `push: ${{ github.event_name != 'pull_request' }}`
 
@@ -127,7 +127,7 @@ actual CI values.
 Reduce build context size and prevent unnecessary files from being
 included:
 
-```
+```text
 .git
 .github
 out/
@@ -170,10 +170,10 @@ metadata, without requiring registry credentials.
 Two repository secrets must be added in GitHub repository settings
 (Settings > Secrets and variables > Actions):
 
-| Secret | Description |
-|--------|-------------|
+| Secret          | Description                    |
+|-----------------|--------------------------------|
 | `QUAY_USERNAME` | Quay.io robot account username |
-| `QUAY_PASSWORD` | Quay.io robot account token |
+| `QUAY_PASSWORD` | Quay.io robot account token    |
 
 Recommendation: Create a Quay.io robot account with push access scoped
 to `clcollins/dwarfbot` only.
@@ -193,12 +193,12 @@ to `clcollins/dwarfbot` only.
 
 ## Risks and Mitigations
 
-| Risk | Mitigation |
-|------|------------|
-| QEMU arm64 emulation is slow (10-20 min) | GHA layer caching; future optimization: Go cross-compilation in builder stage |
-| UBI go-toolset arm64 image might not exist for 1.25 tag | Verify availability; fallback: use `golang:1.25` for builder stage |
-| checkmake rejects Makefile changes | Follow Makefile conventions checkmake expects |
-| `docker/metadata-action` label output conflicts with Containerfile LABELs | `--label` flags from the action override Containerfile defaults (desired behavior) |
+| Risk                                                                       | Mitigation                                                                         |
+|----------------------------------------------------------------------------|------------------------------------------------------------------------------------|
+| QEMU arm64 emulation is slow (10-20 min)                                   | GHA layer caching; future optimization: Go cross-compilation in builder stage      |
+| UBI go-toolset arm64 image might not exist for 1.25 tag                    | Verify availability; fallback: use `golang:1.25` for builder stage                 |
+| checkmake rejects Makefile changes                                         | Follow Makefile conventions checkmake expects                                      |
+| `docker/metadata-action` label output conflicts with Containerfile LABELs  | `--label` flags from the action override Containerfile defaults (desired behavior) |
 
 ## Lessons Learned
 

@@ -61,8 +61,7 @@ image-build:
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
 		--build-arg VCS_REF=$(GIT_REF) \
 		--build-arg VERSION=$(VERSION) \
-		-t $(IMAGE_STRING):$(GIT_SHA) \
-		-t $(IMAGE_STRING):latest .
+		-t $(IMAGE_STRING):$(GIT_SHA) -t $(IMAGE_STRING):latest .
 
 .PHONY: image-push
 image-push:

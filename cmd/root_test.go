@@ -50,6 +50,7 @@ func TestRootCommandHasFlags(t *testing.T) {
 		{"discord-token", ""},
 		{"discord-channels", ""},
 		{"discord-admin-role", ""},
+		{"metrics-port", ""},
 	}
 
 	for _, f := range flags {
@@ -163,6 +164,16 @@ func TestDiscordAdminRoleDefault(t *testing.T) {
 	}
 	if flag.DefValue != "dwarfbot-admin" {
 		t.Errorf("expected discord-admin-role default 'dwarfbot-admin', got %q", flag.DefValue)
+	}
+}
+
+func TestMetricsPortFlagDefault(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("metrics-port")
+	if flag == nil {
+		t.Fatal("metrics-port flag not found")
+	}
+	if flag.DefValue != "8080" {
+		t.Errorf("expected metrics-port default '8080', got %q", flag.DefValue)
 	}
 }
 

@@ -1,0 +1,105 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dwarfbot-alerts
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: dwarfbot.alerts
+      rules:
+        # Platform disconnected for more than 5 minutes
+        - alert: DwarfBotPlatformDown
+          expr: dwarfbot_platform_connected == 0 and dwarfbot_platform_configured == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "DwarfBot {{ $labels.platform }} platform is disconnected"
+            description: >-
+              The {{ $labels.platform }} platform has been disconnected
+              for more than 5 minutes.
+
+        # All platforms down (critical)
+        - alert: DwarfBotAllPlatformsDown
+          expr: sum(dwarfbot_platform_connected) == 0 and sum(dwarfbot_platform_configured) > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "All DwarfBot platforms are disconnected"
+            description: >-
+              No chat platforms are currently connected. The bot is
+              effectively offline.
+
+        # High message send failure rate
+        - alert: DwarfBotHighMessageFailureRate
+          expr: >-
+            sum by(platform)(rate(dwarfbot_messages_sent_total{result="failure"}[5m]))
+            /
+            sum by(platform)(rate(dwarfbot_messages_sent_total[5m]))
+            > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High message failure rate on {{ $labels.platform }}"
+            description: >-
+              More than 10% of messages are failing to send on
+              {{ $labels.platform }} over the last 5 minutes.
+
+    - name: dwarfbot.slo
+      rules:
+        # SLO: 99.9% uptime per platform
+        # Error budget: 0.1% over 30 days = 43.2 minutes
+
+        # Recording rules for availability windows
+        - record: dwarfbot:platform_availability:rate5m
+          expr: avg_over_time(dwarfbot_platform_connected[5m])
+
+        - record: dwarfbot:platform_availability:rate1h
+          expr: avg_over_time(dwarfbot_platform_connected[1h])
+
+        - record: dwarfbot:platform_availability:rate6h
+          expr: avg_over_time(dwarfbot_platform_connected[6h])
+
+        # Fast burn: 14.4x error budget burn rate
+        # 14.4x burn of 0.1% = 1.44% error rate
+        # Availability below 98.56% over 1h window, confirmed by 5m window
+        - alert: DwarfBotPlatformBurnRateFast
+          expr: >-
+            dwarfbot:platform_availability:rate1h < 0.9856
+            and
+            dwarfbot:platform_availability:rate5m < 0.9856
+            and
+            dwarfbot_platform_configured == 1
+          for: 2m
+          labels:
+            severity: critical
+            slo: "true"
+          annotations:
+            summary: "Fast error budget burn on {{ $labels.platform }}"
+            description: >-
+              {{ $labels.platform }} is burning error budget at >14.4x
+              rate. Current 1h availability: {{ $value }}.
+
+        # Slow burn: 6x error budget burn rate
+        # 6x burn of 0.1% = 0.6% error rate
+        # Availability below 99.4% over 6h window, confirmed by 1h window
+        - alert: DwarfBotPlatformBurnRateSlow
+          expr: >-
+            dwarfbot:platform_availability:rate6h < 0.994
+            and
+            dwarfbot:platform_availability:rate1h < 0.994
+            and
+            dwarfbot_platform_configured == 1
+          for: 5m
+          labels:
+            severity: warning
+            slo: "true"
+          annotations:
+            summary: "Slow error budget burn on {{ $labels.platform }}"
+            description: >-
+              {{ $labels.platform }} is burning error budget at >6x
+              rate. Current 6h availability: {{ $value }}.

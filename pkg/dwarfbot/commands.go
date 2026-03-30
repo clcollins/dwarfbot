@@ -43,12 +43,27 @@ func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, ar
 	return nil
 }
 
-func parseCommand(platform ChatPlatform, channelName string, userName string, cmd string, arguments []string) error {
-	if platform.IsAdmin(channelName, userName) {
+// parseCommandOpts holds optional parameters for parseCommand.
+type parseCommandOpts struct {
+	metrics      PlatformMetrics
+	platformName string
+}
+
+func parseCommand(platform ChatPlatform, channelName string, userName string, cmd string, arguments []string, opts ...parseCommandOpts) error {
+	isAdmin := platform.IsAdmin(channelName, userName)
+	if isAdmin {
 		log.Printf("Received orders from the boss...")
 		if err := parseAdminCommand(platform, channelName, cmd, arguments); err != nil {
 			return err
 		}
+	}
+
+	if len(opts) > 0 && opts[0].metrics != nil {
+		adminStr := "false"
+		if isAdmin {
+			adminStr = "true"
+		}
+		opts[0].metrics.RecordCommandProcessed(opts[0].platformName, normalizeCommandLabel(cmd), adminStr)
 	}
 
 	switch cmd {
@@ -95,6 +110,21 @@ func contains(list []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// knownCommands is the set of valid command names for metrics labels.
+// Unknown commands are recorded as "unknown" to prevent unbounded cardinality.
+var knownCommands = map[string]bool{
+	"ping":     true,
+	"channels": true,
+	"shutdown": true,
+}
+
+func normalizeCommandLabel(cmd string) string {
+	if knownCommands[cmd] {
+		return cmd
+	}
+	return "unknown"
 }
 
 func channels(platform ChatPlatform, channelName string, arguments []string) error {

@@ -35,6 +35,9 @@ type DiscordBot struct {
 	// repeated REST lookups on every admin check.
 	adminRoleCache map[string]string
 	adminRoleMu    sync.RWMutex
+
+	// Metrics records platform-level metrics. Nil means no metrics.
+	Metrics PlatformMetrics
 }
 
 // Start creates the Discord session, registers handlers, and opens the connection.
@@ -42,6 +45,9 @@ func (d *DiscordBot) Start() error {
 	var err error
 	d.session, err = discordgo.New("Bot " + d.Token)
 	if err != nil {
+		if d.Metrics != nil {
+			d.Metrics.RecordConnectionAttempt("discord", "failure")
+		}
 		return fmt.Errorf("error creating Discord session: %w", err)
 	}
 
@@ -53,7 +59,15 @@ func (d *DiscordBot) Start() error {
 
 	err = d.session.Open()
 	if err != nil {
+		if d.Metrics != nil {
+			d.Metrics.RecordConnectionAttempt("discord", "failure")
+		}
 		return fmt.Errorf("error opening Discord connection: %w", err)
+	}
+
+	if d.Metrics != nil {
+		d.Metrics.RecordConnectionAttempt("discord", "success")
+		d.Metrics.RecordConnected("discord")
 	}
 
 	log.Printf("Discord bot connected as %s", d.Name)
@@ -67,6 +81,9 @@ func (d *DiscordBot) Start() error {
 // Stop cleanly closes the Discord session.
 func (d *DiscordBot) Stop() error {
 	if d.session != nil {
+		if d.Metrics != nil {
+			d.Metrics.RecordDisconnected("discord", "shutdown")
+		}
 		return d.session.Close()
 	}
 	return nil
@@ -99,8 +116,11 @@ func (d *DiscordBot) messageHandler(s *discordgo.Session, m *discordgo.MessageCr
 	}
 
 	log.Printf("Discord: %s #%s: %s", m.Author.Username, m.ChannelID, m.Content)
+	if d.Metrics != nil {
+		d.Metrics.RecordMessageReceived("discord")
+	}
 
-	if err := parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments); err != nil {
+	if err := parseCommand(d, m.ChannelID, m.Author.ID, cmd, arguments, parseCommandOpts{metrics: d.Metrics, platformName: "discord"}); err != nil {
 		log.Printf("Discord: error handling command %q from user %s in channel %s: %v", cmd, m.Author.ID, m.ChannelID, err)
 	}
 }
@@ -113,7 +133,13 @@ func (d *DiscordBot) SendMessage(channel, msg string) error {
 	}
 	_, err := d.session.ChannelMessageSend(channel, msg)
 	if err != nil {
+		if d.Metrics != nil {
+			d.Metrics.RecordMessageSent("discord", "failure")
+		}
 		return fmt.Errorf("error sending Discord message: %w", err)
+	}
+	if d.Metrics != nil {
+		d.Metrics.RecordMessageSent("discord", "success")
 	}
 	log.Printf("%s #%s: %s", d.Name, channel, msg)
 	return nil

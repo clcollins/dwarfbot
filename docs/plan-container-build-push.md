@@ -114,9 +114,8 @@ Labels follow:
 ARGs have sensible defaults so local `podman build` still works without
 passing build args.
 
-The `docker/build-push-action` `labels` input from
-`docker/metadata-action` supplements/overrides these at build time with
-actual CI values.
+The `--build-arg` values passed by the CI workflow override these
+defaults at build time with actual CI values.
 
 ### 3. New: `.dockerignore`
 
@@ -194,7 +193,7 @@ to `clcollins/dwarfbot` only.
 | QEMU arm64 emulation is slow (10-20 min)                                   | GHA layer caching; future optimization: Go cross-compilation in builder stage      |
 | UBI go-toolset arm64 image might not exist for 1.25 tag                    | Verify availability; fallback: use `golang:1.25` for builder stage                 |
 | checkmake rejects Makefile changes                                         | Follow Makefile conventions checkmake expects                                      |
-| `docker/metadata-action` label output conflicts with Containerfile LABELs  | `--label` flags from the action override Containerfile defaults (desired behavior) |
+| `--build-arg` values conflict with Containerfile LABEL defaults            | CI build-arg values override Containerfile ARG defaults (desired behavior)         |
 
 ## Lessons Learned
 

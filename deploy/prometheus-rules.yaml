@@ -85,6 +85,8 @@ spec:
             dwarfbot:platform_availability:rate1h < 0.9856
             and
             dwarfbot:platform_availability:rate5m < 0.9856
+            and
+            dwarfbot_platform_configured == 1
           for: 2m
           labels:
             severity: critical
@@ -103,6 +105,8 @@ spec:
             dwarfbot:platform_availability:rate6h < 0.994
             and
             dwarfbot:platform_availability:rate1h < 0.994
+            and
+            dwarfbot_platform_configured == 1
           for: 5m
           labels:
             severity: warning

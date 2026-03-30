@@ -1143,5 +1143,42 @@ func TestParseCommand_RecordsAdminMetric(t *testing.T) {
 	}
 }
 
+func TestParseCommand_UnknownCommandNormalized(t *testing.T) {
+	rec := newMockMetricsRecorder()
+	mock := newMockPlatform("testbot", []string{"ch1"})
+
+	_ = parseCommand(mock, "ch1", "user", "xyzgarbage", []string{}, parseCommandOpts{
+		metrics:      rec,
+		platformName: "twitch",
+	})
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.commandsProcessed) != 1 {
+		t.Fatalf("expected 1 command metric, got %d", len(rec.commandsProcessed))
+	}
+	if rec.commandsProcessed[0].command != "unknown" {
+		t.Errorf("expected command label 'unknown' for unrecognized command, got %q", rec.commandsProcessed[0].command)
+	}
+}
+
+func TestNormalizeCommandLabel(t *testing.T) {
+	tests := []struct {
+		input, expected string
+	}{
+		{"ping", "ping"},
+		{"channels", "channels"},
+		{"shutdown", "shutdown"},
+		{"unknown_cmd", "unknown"},
+		{"", "unknown"},
+		{"PING", "unknown"}, // case sensitive
+	}
+	for _, tt := range tests {
+		if got := normalizeCommandLabel(tt.input); got != tt.expected {
+			t.Errorf("normalizeCommandLabel(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
 // Verify DwarfBot satisfies ChatPlatform at compile time
 var _ ChatPlatform = (*DwarfBot)(nil)

@@ -68,6 +68,23 @@ func TestServeMux_HealthzEndpoint(t *testing.T) {
 	}
 }
 
+func TestNewServer_ReturnsConfiguredServer(t *testing.T) {
+	m := New()
+	srv := NewServer(":0", m.Registry)
+	if srv == nil {
+		t.Fatal("expected non-nil server")
+	}
+	if srv.Addr != ":0" {
+		t.Errorf("expected addr ':0', got %q", srv.Addr)
+	}
+	if srv.Handler == nil {
+		t.Error("expected non-nil handler")
+	}
+	if srv.ReadHeaderTimeout == 0 {
+		t.Error("expected non-zero ReadHeaderTimeout")
+	}
+}
+
 func TestServeMux_MetricsContainsGoCollector(t *testing.T) {
 	m := New()
 	mux := NewServeMux(m.Registry)

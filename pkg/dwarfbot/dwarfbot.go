@@ -99,6 +99,7 @@ type DwarfBot struct {
 	// concurrent access between the bot goroutine and Stop().
 	mu      sync.Mutex
 	stopped bool
+	stopCh  chan struct{}
 }
 
 // Stop signals the bot to shut down cleanly by closing the connection,
@@ -108,6 +109,13 @@ func (db *DwarfBot) Stop() {
 	db.stopped = true
 	db.lastDisconnectReason = "shutdown"
 	conn := db.conn
+	if db.stopCh != nil {
+		select {
+		case <-db.stopCh:
+		default:
+			close(db.stopCh)
+		}
+	}
 	db.mu.Unlock()
 	if conn != nil {
 		_ = conn.Close()
@@ -123,13 +131,22 @@ func (db *DwarfBot) isStopped() bool {
 func (db *DwarfBot) setDisconnectReason(reason string) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	// Don't overwrite "shutdown" with an error reason
 	if db.lastDisconnectReason != "shutdown" {
 		db.lastDisconnectReason = reason
 	}
 }
 
+func (db *DwarfBot) setConn(conn net.Conn) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.conn = conn
+}
+
 func (db *DwarfBot) Start() error {
+	db.mu.Lock()
+	db.stopCh = make(chan struct{})
+	db.mu.Unlock()
+
 	defer db.Disconnect()
 
 	log.Println("dwarfbot is starting...")
@@ -145,14 +162,15 @@ func (db *DwarfBot) Start() error {
 		}
 
 		if err := db.Connect(); err != nil {
+			if db.isStopped() {
+				log.Println("Twitch bot stopped")
+				return nil
+			}
 			return fmt.Errorf("twitch connection failed: %w", err)
 		}
 		db.Authenticate()
 
-		// Join the bot's channel
 		db.JoinChannel(db.Name)
-
-		// Join secondary channels
 		for _, channel := range db.Channels {
 			db.JoinChannel(channel)
 		}
@@ -181,9 +199,9 @@ func (db *DwarfBot) Connect() error {
 		if db.isStopped() {
 			return fmt.Errorf("connect aborted: bot is stopping")
 		}
-		var err error
-		db.conn, err = net.Dial("tcp", db.Server+":"+db.Port)
+		conn, err := net.Dial("tcp", db.Server+":"+db.Port)
 		if err == nil {
+			db.setConn(conn)
 			db.startTime = time.Now()
 			log.Printf("Connected to %s", db.Server)
 			if db.Metrics != nil {
@@ -197,7 +215,20 @@ func (db *DwarfBot) Connect() error {
 		}
 		backoff := time.Duration(attempt+1) * time.Second
 		log.Printf("Failed connecting to %s, retrying in %v...\n", db.Server, backoff)
-		time.Sleep(backoff)
+
+		// Interruptible backoff — returns immediately if Stop() is called
+		db.mu.Lock()
+		stopCh := db.stopCh
+		db.mu.Unlock()
+		if stopCh != nil {
+			select {
+			case <-stopCh:
+				return fmt.Errorf("connect aborted: bot is stopping")
+			case <-time.After(backoff):
+			}
+		} else {
+			time.Sleep(backoff)
+		}
 	}
 
 	return fmt.Errorf("failed to connect to %s after %d attempts", db.Server, maxRetries)
@@ -205,23 +236,25 @@ func (db *DwarfBot) Connect() error {
 
 // Disconnect closes the IRC connection. Safe to call multiple times.
 func (db *DwarfBot) Disconnect() {
-	if db.conn == nil {
+	db.mu.Lock()
+	conn := db.conn
+	db.conn = nil
+	reason := "shutdown"
+	if db.lastDisconnectReason != "" {
+		reason = db.lastDisconnectReason
+	}
+	db.lastDisconnectReason = ""
+	db.mu.Unlock()
+
+	if conn == nil {
 		return
 	}
-	if err := db.conn.Close(); err != nil {
+	if err := conn.Close(); err != nil {
 		log.Printf("Error closing connection: %v", err)
 	}
-	db.conn = nil // prevent double-close
 	duration := time.Since(db.startTime)
 	log.Printf("Connection closed; elapsed time %g", duration.Seconds())
 	if db.Metrics != nil {
-		db.mu.Lock()
-		reason := "shutdown"
-		if db.lastDisconnectReason != "" {
-			reason = db.lastDisconnectReason
-		}
-		db.lastDisconnectReason = ""
-		db.mu.Unlock()
 		db.Metrics.RecordDisconnected("twitch", reason)
 		db.Metrics.RecordConnectionDuration("twitch", duration)
 	}

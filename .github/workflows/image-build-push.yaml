@@ -10,6 +10,7 @@ on:
 env:
   REGISTRY: quay.io
   IMAGE_NAME: clcollins/dwarfbot
+  CONTAINER_FILE: Containerfile
 
 jobs:
   image-build-push:
@@ -21,44 +22,90 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Install QEMU for multi-arch builds
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set build metadata
+        id: meta
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          echo "full_image=${FULL_IMAGE}" >> "$GITHUB_OUTPUT"
+
+          # Build tag list
+          TAGS="${FULL_IMAGE}:${SHORT_SHA}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            TAGS="${TAGS} ${FULL_IMAGE}:pr-${PR_NUMBER}"
+            echo "version=pr-${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+            TAGS="${TAGS} ${FULL_IMAGE}:${VERSION}"
+            # Also tag without 'v' prefix if present (e.g., v0.2.0 -> 0.2.0)
+            VERSION_NO_V="${VERSION#v}"
+            if [ "${VERSION_NO_V}" != "${VERSION}" ]; then
+              TAGS="${TAGS} ${FULL_IMAGE}:${VERSION_NO_V}"
+            fi
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            TAGS="${TAGS} ${FULL_IMAGE}:latest"
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Quay.io
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
+        run: |
+          podman login quay.io \
+            --username "${{ secrets.QUAY_USERNAME }}" \
+            --password "${{ secrets.QUAY_PASSWORD }}"
 
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=pr,prefix=pr-
-            type=sha,prefix=,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern=v{{version}}
+      - name: Build linux/amd64 image
+        run: |
+          podman build -f ${{ env.CONTAINER_FILE }} \
+            --platform linux/amd64 \
+            --build-arg BUILD_DATE=${{ steps.meta.outputs.build_date }} \
+            --build-arg VCS_REF=${{ github.sha }} \
+            --build-arg VERSION=${{ steps.meta.outputs.version }} \
+            -t ${{ steps.meta.outputs.full_image }}:${{ steps.meta.outputs.short_sha }}-amd64 .
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Containerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
-            VCS_REF=${{ github.sha }}
-            VERSION=${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Build linux/arm64 image
+        run: |
+          podman build -f ${{ env.CONTAINER_FILE }} \
+            --platform linux/arm64 \
+            --build-arg BUILD_DATE=${{ steps.meta.outputs.build_date }} \
+            --build-arg VCS_REF=${{ github.sha }} \
+            --build-arg VERSION=${{ steps.meta.outputs.version }} \
+            -t ${{ steps.meta.outputs.full_image }}:${{ steps.meta.outputs.short_sha }}-arm64 .
+
+      - name: Create and push multi-arch manifest
+        run: |
+          FULL_IMAGE="${{ steps.meta.outputs.full_image }}"
+          SHORT_SHA="${{ steps.meta.outputs.short_sha }}"
+          TAGS="${{ steps.meta.outputs.tags }}"
+
+          # Create manifest with both architectures
+          podman manifest create ${FULL_IMAGE}:${SHORT_SHA} \
+            ${FULL_IMAGE}:${SHORT_SHA}-amd64 \
+            ${FULL_IMAGE}:${SHORT_SHA}-arm64
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            # Push manifest under each tag
+            for TAG in ${TAGS}; do
+              if [ "${TAG}" != "${FULL_IMAGE}:${SHORT_SHA}" ]; then
+                podman tag ${FULL_IMAGE}:${SHORT_SHA} "${TAG}"
+              fi
+              podman manifest push --all "${TAG}" "docker://${TAG}"
+            done
+          else
+            echo "Pull request build - skipping push."
+            echo "Tags that would be pushed: ${TAGS}"
+          fi

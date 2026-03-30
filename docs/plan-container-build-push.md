@@ -36,9 +36,9 @@ and CI validation.
   extending `ci.yaml`. The existing CI handles code quality; the new
   workflow handles container publishing. Different triggers are needed
   (the new workflow needs `push tags: ['v*']`).
-- **Docker buildx with QEMU** for multi-arch builds. This is the
-  standard GitHub Actions approach for multi-platform manifests.
-  `docker/build-push-action` handles manifest creation automatically.
+- **Podman with QEMU** for multi-arch builds. Podman's `--platform`
+  flag and `podman manifest` handle per-architecture builds and manifest
+  creation natively without Docker dependencies.
 - **Existing `image-build` job in `ci.yaml`** is preserved and enhanced
   with build-arg passing and label validation. It continues to serve as
   a podman-based smoke test.
@@ -47,15 +47,13 @@ and CI validation.
 
 ### 1. New: `.github/workflows/image-build-push.yaml`
 
-Multi-arch build-and-push workflow using:
+Multi-arch build-and-push workflow using Podman:
 
-- `docker/setup-qemu-action@v3` - ARM64 emulation
-- `docker/setup-buildx-action@v3` - buildx builder
-- `docker/login-action@v3` - quay.io authentication (conditional, not
-  on PRs)
-- `docker/metadata-action@v5` - tag and label generation from git
-  context
-- `docker/build-push-action@v6` - multi-platform build and push
+- `qemu-user-static` package for ARM64 emulation
+- `podman login` for quay.io authentication (conditional, not on PRs)
+- Shell-based tag and label generation from git context
+- `podman build --platform` for per-architecture builds
+- `podman manifest` for multi-arch manifest creation and push
 
 Triggers:
 
@@ -68,7 +66,7 @@ on:
     tags: ['v*']
 ```
 
-Tag strategy via `docker/metadata-action`:
+Tag strategy via shell script in metadata step:
 
 | Event        | Tags generated                    |
 |--------------|-----------------------------------|
@@ -76,9 +74,7 @@ Tag strategy via `docker/metadata-action`:
 | Push to main | `latest`, `abc1234`               |
 | Tag v0.2.0   | `v0.2.0`, `0.2.0`, `abc1234`      |
 
-Push is conditional: `push: ${{ github.event_name != 'pull_request' }}`
-
-GHA layer caching: `cache-from: type=gha` / `cache-to: type=gha,mode=max`
+Push is conditional: skipped when `github.event_name == 'pull_request'`
 
 ### 2. Modify: `Containerfile`
 

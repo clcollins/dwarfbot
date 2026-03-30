@@ -121,6 +121,7 @@ func (db *DwarfBot) Start() error {
 		err := db.HandleChat()
 		if err != nil {
 			log.Println(err)
+			db.Disconnect()
 			time.Sleep(time.Second)
 			log.Println("restarting bot...")
 		}

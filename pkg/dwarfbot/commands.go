@@ -63,7 +63,7 @@ func parseCommand(platform ChatPlatform, channelName string, userName string, cm
 		if isAdmin {
 			adminStr = "true"
 		}
-		opts[0].metrics.RecordCommandProcessed(opts[0].platformName, cmd, adminStr)
+		opts[0].metrics.RecordCommandProcessed(opts[0].platformName, normalizeCommandLabel(cmd), adminStr)
 	}
 
 	switch cmd {
@@ -110,6 +110,21 @@ func contains(list []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// knownCommands is the set of valid command names for metrics labels.
+// Unknown commands are recorded as "unknown" to prevent unbounded cardinality.
+var knownCommands = map[string]bool{
+	"ping":     true,
+	"channels": true,
+	"shutdown": true,
+}
+
+func normalizeCommandLabel(cmd string) string {
+	if knownCommands[cmd] {
+		return cmd
+	}
+	return "unknown"
 }
 
 func channels(platform ChatPlatform, channelName string, arguments []string) error {

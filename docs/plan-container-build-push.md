@@ -74,7 +74,7 @@ Tag strategy via `docker/metadata-action`:
 |--------------|-----------------------------------|
 | PR #22       | `pr-22`, `abc1234` (build only)   |
 | Push to main | `latest`, `abc1234`               |
-| Tag v0.2.0   | `v0.2.0`, `0.2.0`, `abc1234`     |
+| Tag v0.2.0   | `v0.2.0`, `0.2.0`, `abc1234`      |
 
 Push is conditional: `push: ${{ github.event_name != 'pull_request' }}`
 

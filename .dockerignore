@@ -1,0 +1,10 @@
+.git
+.github
+out/
+docs/
+img/
+deploy/
+*.md
+LICENSE
+.markdownlint.yaml
+.dwarfbot.yaml

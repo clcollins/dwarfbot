@@ -6,6 +6,11 @@ IMAGE_REGISTRY := quay.io
 CONTAINER_FILE := Containerfile
 IMAGE_STRING := $(IMAGE_REGISTRY)/$(PROJECT)/$(NAME)
 
+GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+VERSION ?= dev
+
 GO := go
 GOFLAGS ?=
 
@@ -52,7 +57,16 @@ build:
 
 .PHONY: image-build
 image-build:
-	$(CONTAINER_SUBSYS) build -f $(CONTAINER_FILE) -t $(IMAGE_STRING):latest .
+	$(CONTAINER_SUBSYS) build -f $(CONTAINER_FILE) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg VCS_REF=$(GIT_COMMIT) \
+		--build-arg VERSION=$(VERSION) \
+		-t $(IMAGE_STRING):$(GIT_SHA) -t $(IMAGE_STRING):latest .
+
+.PHONY: image-push
+image-push: image-build
+	$(CONTAINER_SUBSYS) push $(IMAGE_STRING):$(GIT_SHA)
+	$(CONTAINER_SUBSYS) push $(IMAGE_STRING):latest
 
 # --- Linting tools ---
 

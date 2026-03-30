@@ -30,7 +30,7 @@ and CI validation.
 5. **Registry:** quay.io/clcollins/dwarfbot with robot account
    credentials via GitHub secrets
 
-## Architecture Decision: Separate Workflow + Docker Buildx
+## Architecture Decision: Separate Workflow + Podman
 
 - **Separate workflow file** (`image-build-push.yaml`) rather than
   extending `ci.yaml`. The existing CI handles code quality; the new
@@ -142,7 +142,7 @@ by both Docker buildx and Podman.
 
 Add git metadata variables and update `image-build` to pass build args:
 
-- New variables: `GIT_SHA`, `GIT_REF`, `BUILD_DATE`, `VERSION`
+- New variables: `GIT_SHA`, `GIT_COMMIT`, `BUILD_DATE`, `VERSION`
 - Updated `image-build` target: passes `--build-arg` for all three ARGs,
   tags with both `$(GIT_SHA)` and `latest`
 - New `image-push` target: pushes tagged images to registry

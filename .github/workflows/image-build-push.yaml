@@ -22,10 +22,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install QEMU for multi-arch builds
+      - name: Install Podman and QEMU for multi-arch builds
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static
+          sudo apt-get install -y podman qemu-user-static
 
       - name: Set build metadata
         id: meta
@@ -64,9 +64,9 @@ jobs:
       - name: Log in to Quay.io
         if: github.event_name != 'pull_request'
         run: |
-          podman login quay.io \
+          echo "${{ secrets.QUAY_PASSWORD }}" | podman login quay.io \
             --username "${{ secrets.QUAY_USERNAME }}" \
-            --password "${{ secrets.QUAY_PASSWORD }}"
+            --password-stdin
 
       - name: Build linux/amd64 image
         run: |
@@ -107,10 +107,7 @@ jobs:
           podman manifest add ${FULL_IMAGE}:${SHORT_SHA} \
             containers-storage:${FULL_IMAGE}:${SHORT_SHA}-arm64
 
-          # Push manifest under each tag
+          # Push the manifest under each tag
           for TAG in ${TAGS}; do
-            if [ "${TAG}" != "${FULL_IMAGE}:${SHORT_SHA}" ]; then
-              podman tag ${FULL_IMAGE}:${SHORT_SHA} "${TAG}"
-            fi
-            podman manifest push --all "${TAG}" "docker://${TAG}"
+            podman manifest push --all "${FULL_IMAGE}:${SHORT_SHA}" "docker://${TAG}"
           done

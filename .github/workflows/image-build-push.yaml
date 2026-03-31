@@ -64,8 +64,8 @@ jobs:
       - name: Log in to Quay.io
         if: github.event_name != 'pull_request'
         run: |
-          echo "${{ secrets.QUAY_PASSWORD }}" | podman login quay.io \
-            --username "${{ secrets.QUAY_USERNAME }}" \
+          echo "${{ secrets.QUAY_ROBOT_TOKEN }}" | podman login quay.io \
+            --username "${{ secrets.QUAY_ROBOT_USERNAME }}" \
             --password-stdin
 
       - name: Build linux/amd64 image
@@ -98,13 +98,6 @@ jobs:
             "containers-storage:${FULL_IMAGE}:${SHORT_SHA}-amd64"
           podman manifest add "${FULL_IMAGE}:${SHORT_SHA}" \
             "containers-storage:${FULL_IMAGE}:${SHORT_SHA}-arm64"
-
-          # Apply all computed tags locally
-          for TAG in ${TAGS}; do
-            if [ "${TAG}" != "${FULL_IMAGE}:${SHORT_SHA}" ]; then
-              podman tag "${FULL_IMAGE}:${SHORT_SHA}" "${TAG}"
-            fi
-          done
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "Pull request build - manifest created and tagged locally; skipping registry push."

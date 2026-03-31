@@ -152,3 +152,63 @@ To use the Discord integration:
   operation
 - Manual: Verify admin commands only work for users with
   the configured role
+
+## Post-Mortem (PR #3 Review)
+
+_Lessons captured from PR #3 Copilot code review. Cluster
+deployment verification is separate._
+
+### What Went Well
+
+- ChatPlatform interface cleanly abstracted both platforms
+  with no platform-specific leakage into command handlers
+- Mock platform enabled thorough command testing without
+  real network connections
+- Dual-platform startup logic correctly handled all
+  combinations (both, either, neither)
+
+### What Went Wrong
+
+- **Shutdown no-op in Discord-only mode** (Copilot #1):
+  `DiscordBot.Shutdown()` did nothing when `exitFunc` was nil,
+  meaning the `!dwarfbot shutdown` admin command wouldn't
+  actually stop the bot. Caught by Copilot review; fixed by
+  ensuring `exitFunc` always defaults to `os.Exit`.
+
+- **Data race on adminRoleCache** (Copilot #13): The
+  `adminRoleCache` map was accessed without synchronization.
+  Discord handlers run concurrently, so simultaneous admin
+  checks could panic. Caught by Copilot review.
+
+- **Interface violation after Die() signature change**
+  (Copilot #17): `DwarfBot.Die` was changed to accept an exit
+  code parameter but the `Bot` interface wasn't updated,
+  breaking the interface contract. Caught by Copilot review.
+
+- **Nil conn panic in Disconnect()** (Copilot #37):
+  `Disconnect()` unconditionally called `db.conn.Close()`
+  without nil-checking, causing a panic if called before
+  `Connect()`. Caught by Copilot review.
+
+- **Build failure on clean checkout** (Copilot #21/#22):
+  `go build -o out/dwarfbot` would fail because the `out/`
+  directory didn't exist. Applied to both Makefile and
+  Containerfile. Caught by Copilot review; fixed by adding
+  `mkdir -p out`.
+
+- **Flag type mismatch** (Copilot #20): `channels` defined
+  as `StringP` but read via `viper.GetStringSlice()`. Type
+  mismatch could cause unexpected behavior depending on how
+  the value was provided. Caught by Copilot review.
+
+### Lessons Learned
+
+- Always nil-check `net.Conn` before calling `Close()` —
+  lifecycle ordering isn't guaranteed across all code paths
+- When changing function signatures on concrete types, grep
+  for interface definitions that reference them
+- Maps shared across goroutines need synchronization even if
+  concurrent access seems unlikely — Discord's event handlers
+  run in goroutines by default
+- Build targets that write to directories must create those
+  directories first (`mkdir -p`)

@@ -195,6 +195,61 @@ to `clcollins/dwarfbot` only.
 | checkmake rejects Makefile changes                                         | Follow Makefile conventions checkmake expects                                      |
 | `--build-arg` values conflict with Containerfile LABEL defaults            | CI build-arg values override Containerfile ARG defaults (desired behavior)         |
 
-## Lessons Learned
+## Lessons Learned (PR #9 Review)
 
-(To be filled in after implementation)
+_Lessons captured from PR #9 Copilot code review and CI
+qualification._
+
+### What Went Well
+
+- Separate workflow file kept CI concerns cleanly separated
+  from container publishing
+- Conditional push (`github.event_name != 'pull_request'`)
+  prevented accidental pushes from PR builds
+- OCI label validation in CI caught label issues early
+
+### What Went Wrong
+
+- **Podman not installed on runner** (Copilot round 1 #1):
+  The workflow used `podman` commands but `ubuntu-latest`
+  does not guarantee Podman is available. Would have failed
+  at the first `podman` invocation. Caught by Copilot
+  review; fixed by adding explicit `apt-get install podman`.
+
+- **Manifest push used wrong object type** (Copilot round 1
+  #3): The manifest push loop used `podman tag` on manifest
+  lists and then pushed each tag separately. `podman tag`
+  operates on images, not manifest lists. Fixed by pushing
+  the source manifest directly to each tag destination.
+
+- **Manifest creation skipped for PRs** (Copilot round 2
+  #1): PR builds skipped manifest creation entirely, meaning
+  multi-arch assembly was never validated on PRs. Fixed by
+  creating the manifest locally for all builds and only
+  skipping the registry push.
+
+- **PR tags never applied locally** (Copilot round 3 #1):
+  Tags like `pr-9` and the short SHA were computed in
+  metadata but never applied to local images during PR
+  builds, making the stated tagging behavior inconsistent
+  with reality. Fixed by applying all computed tags locally.
+
+- **Version label mismatch** (Copilot round 3 #2): When
+  publishing a version tag like `v0.2.0`, the OCI
+  `version` label used `v0.2.0` but the published tag was
+  `0.2.0` (without prefix). Fixed by using the no-`v` form
+  for the version build-arg.
+
+### Lessons Learned
+
+- GitHub-hosted runners may not have all container tools
+  pre-installed — always explicitly install required tools
+- When building multi-arch manifests with Podman, use
+  `containers-storage:` transport to reference locally-built
+  images instead of assuming registry access
+- Multi-arch manifest creation should run on PR builds too
+  (just skip the push) to validate the assembly process
+- Tag metadata computed in one step should be applied in a
+  later step — don't just log what "would be" created
+- Version labels and published tags must use the same format
+  to avoid consumer confusion

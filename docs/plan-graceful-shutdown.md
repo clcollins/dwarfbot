@@ -43,3 +43,55 @@ metrics server shutdown.
 `ReadLine()` doesn't accept a context. You'd still need to close
 the conn to unblock it. The `Stop()` approach achieves the same
 result with no interface changes and minimal code.
+
+## Post-Mortem (PR #8 Review)
+
+_Lessons captured from PR #8 Copilot code review._
+
+### What Went Well
+
+- `Stop()` + connection close pattern cleanly unblocked
+  `ReadLine()` without needing context plumbing
+- Mutex-protected `stopped` flag prevented race conditions
+  on the shutdown signal itself
+- 5-second shutdown wait in signal handler gave the goroutine
+  time to finish without hanging indefinitely
+
+### What Went Wrong
+
+- **Disconnect reason overwritten during shutdown** (Copilot
+  #1/#2): `Stop()` set `lastDisconnectReason = "shutdown"`,
+  but `HandleChat()` overwrote it with `"read_error"` when
+  the closed connection caused `ReadLine()` to fail. This
+  meant shutdown metrics recorded the wrong disconnect
+  reason. Caught by Copilot review.
+
+- **Conn accessed without mutex** (Copilot #7/#9): `Stop()`
+  reads `db.conn` under `mu`, but `Connect()` and
+  `Disconnect()` read/write `db.conn` without the mutex,
+  creating a data race. Caught by Copilot review.
+
+- **Stop during retry backoff not interruptible** (Copilot
+  #3/#8): If `Stop()` was called during `Connect()`'s retry
+  backoff sleep (up to ~10s), the goroutine wouldn't notice
+  until the sleep completed, exceeding the 5s shutdown
+  window. Should have used a `select` on `time.After()` vs
+  the stop channel. Caught by Copilot review.
+
+- **Missing IRC QUIT message** (Copilot #12): The PR
+  description mentioned sending a QUIT message to IRC on
+  shutdown, but the implementation only closes the connection
+  without writing QUIT. Caught by Copilot review.
+
+### Lessons Learned
+
+- When adding a "reason" field that can be set from multiple
+  code paths, establish precedence rules — shutdown reason
+  should not be overwritable by error-handling paths
+- All reads/writes of shared mutable state (`conn`,
+  `lastDisconnectReason`) must be under the same mutex, not
+  just the flag that gates them
+- Interruptible sleeps require `select` with a stop channel
+  — `time.Sleep()` in a retry loop is not cancellable
+- PR descriptions are reviewed for accuracy — if the
+  description claims a behavior, the code must implement it

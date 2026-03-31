@@ -64,7 +64,7 @@ jobs:
       - name: Log in to Quay.io
         if: github.event_name != 'pull_request'
         run: |
-          echo "${{ secrets.QUAY_ROBOT_TOKEN }}" | podman login quay.io \
+          echo "${{ secrets.QUAY_ROBOT_TOKEN }}" | podman login ${{ env.REGISTRY }} \
             --username "${{ secrets.QUAY_ROBOT_USERNAME }}" \
             --password-stdin
 
@@ -102,7 +102,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "Pull request build - manifest created locally; skipping registry push."
             echo "Tags that would be pushed: ${TAGS}"
-            podman manifest inspect "${FULL_IMAGE}:${SHORT_SHA}" || true
+            podman manifest inspect "${FULL_IMAGE}:${SHORT_SHA}"
             exit 0
           fi
 

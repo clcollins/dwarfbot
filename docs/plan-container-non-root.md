@@ -87,3 +87,30 @@ writes at runtime.
 - Help works: `podman run --read-only --rm dwarfbot:test --help`
 - Local dev with config file unchanged:
   `./out/dwarfbot --config ~/.dwarfbot.yaml`
+
+## Post-Mortem (PR #4 Review)
+
+_Lessons captured from PR #4 Copilot code review._
+
+### What Went Well
+
+- `errors.As()` for `viper.ConfigFileNotFoundError` cleanly
+  distinguished "missing file" from "parse error"
+- Environment variable prefix prevented collisions with
+  other tools' env vars
+
+### What Went Wrong
+
+- **Silent backward-incompatible env var change** (Copilot
+  #1): Adding `viper.SetEnvPrefix("DWARFBOT")` silently
+  broke any existing deployments using unprefixed env vars
+  like `DISCORD_TOKEN`. The plan doc listed the new prefixed
+  names but didn't call out the breaking change or provide
+  migration guidance. Caught by Copilot review.
+
+### Lessons Learned
+
+- Changes to environment variable names are a public API
+  change — document the migration path and consider
+  supporting both old and new names during a transition
+  period via `viper.BindEnv()`

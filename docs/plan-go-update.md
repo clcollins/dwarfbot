@@ -57,3 +57,25 @@ New indirect dependencies added by viper v1.21.0:
   the available UBI9 go-toolset builder image.
 - UBI 9 (ubi-minimal) replaces UBI 8 as the base container
   image, as UBI 8 is approaching end of maintenance support.
+
+## Post-Mortem (PR #3 Review)
+
+_Lessons captured from PR #3 Copilot code review._
+
+### What Went Wrong
+
+- **Plan doc version mismatch** (Copilot #19/#32): The plan
+  document originally stated Go 1.24 and listed dependency
+  versions that didn't match the actual `go.mod` contents
+  (e.g., viper listed as v1.21.0 but `go.mod` had v1.20.1,
+  locafero listed as v0.6.0→v0.12.0 but actual was v0.7.0).
+  Caught by Copilot review.
+
+### Lessons Learned
+
+- After running `go get -u` and `go mod tidy`, re-read
+  `go.mod` and update the plan's dependency table to match
+  actual resolved versions — don't assume `go get -u` will
+  pull the exact version you expect
+- Plan documents should be updated as a final step after all
+  code changes are committed, not written speculatively

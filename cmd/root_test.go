@@ -62,7 +62,7 @@ func TestRootCommandHasFlags(t *testing.T) {
 			if flag == nil {
 				t.Fatalf("expected flag %q to exist", f.name)
 			}
-			if f.shorthand != "" && flag.Shorthand != f.shorthand {
+			if flag.Shorthand != f.shorthand {
 				t.Errorf("expected shorthand %q, got %q", f.shorthand, flag.Shorthand)
 			}
 		})

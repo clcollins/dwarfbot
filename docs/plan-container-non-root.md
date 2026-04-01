@@ -76,7 +76,7 @@ writes at runtime.
 - `TestInitConfig_NoConfigFile`: Verifies graceful fallback when
   no config file exists
 - `TestInitConfig_EnvVarPrefix`: Verifies `DWARFBOT_NAME` and
-  `DWARFBOT_TOKEN` env vars are read correctly
+  `DWARFBOT_TWITCH_TOKEN` env vars are read correctly
 - `TestInitConfig_DiscordEnvVars`: Verifies Discord-specific
   env vars (`DWARFBOT_DISCORD_TOKEN`, etc.)
 

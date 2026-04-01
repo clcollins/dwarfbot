@@ -57,6 +57,7 @@ naming convention regressions.
 ### 1. Flag registration and viper bindings (`cmd/root.go`)
 
 Renamed Twitch flag definitions in `init()`:
+
 - `--server` / `-s` -> `--twitch-server` (no short flag)
 - `--port` / `-p` -> `--twitch-port` (no short flag)
 - `--channels` / `-c` -> `--twitch-channels` (no short flag)
@@ -67,6 +68,7 @@ Updated `viper.BindPFlag()` keys to match.
 ### 2. Viper Get calls (`cmd/root.go`)
 
 Updated `Run` function to use new config key names:
+
 - `viper.GetString("token")` -> `viper.GetString("twitch_token")`
 - `viper.GetStringSlice("channels")` -> `viper.GetStringSlice("twitch_channels")`
 - `viper.GetString("server")` -> `viper.GetString("twitch_server")`
@@ -110,6 +112,7 @@ referencing this plan document.
 ## Migration Guide
 
 Update environment variables:
+
 ```sh
 # Before
 export DWARFBOT_TOKEN=oauth:abc123
@@ -125,6 +128,7 @@ export DWARFBOT_TWITCH_PORT=6667
 ```
 
 Update config file (`~/.dwarfbot.yaml`):
+
 ```yaml
 # Before
 token: oauth:abc123

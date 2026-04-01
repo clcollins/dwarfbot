@@ -95,7 +95,8 @@ writes at runtime.
   ```
 
 - Help works: `podman run --read-only --rm dwarfbot:test --help`
-- Local dev with config file unchanged:
+- Local dev with migrated config file (`~/.dwarfbot.yaml`); see
+  `docs/plan-standardize-config-keys.md` for migration steps:
   `./out/dwarfbot --config ~/.dwarfbot.yaml`
 
 ## Post-Mortem (PR #4 Review)

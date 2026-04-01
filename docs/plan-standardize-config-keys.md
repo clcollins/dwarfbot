@@ -85,11 +85,12 @@ Updated `Run` function to use new config key names:
 
 ### 4. CI naming convention test (`cmd/root_test.go`)
 
-Added `TestConfigKeyNamingConvention` that validates all non-general
-flags follow the `<provider>-<item>` naming convention. General
-flags (`config`, `verbose`, `name`, `metrics-port`) are exempted.
-All other flags must start with a known provider prefix (`twitch-`
-or `discord-`). Runs as part of `make ci` via `go test`.
+Added `TestFlagNamingConvention` that validates all non-general
+CLI flags follow the `<provider>-<item>` naming convention.
+General flags (`config`, `verbose`, `name`, `metrics-port`) are
+exempted. All other flags must start with a known provider prefix
+(`twitch-` or `discord-`). Runs as part of `make ci` via
+`go test`.
 
 ### 5. Prior plan doc updated (`docs/plan-container-non-root.md`)
 
@@ -144,7 +145,7 @@ twitch_channels:
 ## Verification
 
 - `make ci` passes (fmt, vet, test, build)
-- `TestConfigKeyNamingConvention` catches non-compliant flags
+- `TestFlagNamingConvention` catches non-compliant flags
 - Existing tests updated and passing with new key names
 
 ## Post-Mortem

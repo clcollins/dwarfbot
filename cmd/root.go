@@ -77,7 +77,7 @@ var rootCmd = &cobra.Command{
 		discordEnabled := discordToken != "" && len(discordChannels) > 0
 
 		if !twitchEnabled && !discordEnabled {
-			log.Fatal("At least one platform must be configured (Twitch: twitch_token + twitch_channels, Discord: discord_token + discord_channels)")
+			log.Fatal("At least one platform must be configured. Twitch: provide --twitch-token and --twitch-channels (or DWARFBOT_TWITCH_TOKEN and DWARFBOT_TWITCH_CHANNELS). Discord: provide --discord-token and --discord-channels (or DWARFBOT_DISCORD_TOKEN and DWARFBOT_DISCORD_CHANNELS).")
 		}
 
 		// Initialize metrics

@@ -52,13 +52,13 @@ below are the authoritative reference.
 export DWARFBOT_NAME=mybot
 export DWARFBOT_TWITCH_TOKEN=oauth:abc123
 export DWARFBOT_TWITCH_CHANNELS=mychannel
-./dwarfbot
+./out/dwarfbot
 
 # Run with Discord only
 export DWARFBOT_NAME=mybot
 export DWARFBOT_DISCORD_TOKEN=Bot_token_here
 export DWARFBOT_DISCORD_CHANNELS=123456789
-./dwarfbot
+./out/dwarfbot
 
 # Run with both platforms
 export DWARFBOT_NAME=mybot
@@ -66,7 +66,7 @@ export DWARFBOT_TWITCH_TOKEN=oauth:abc123
 export DWARFBOT_TWITCH_CHANNELS=mychannel
 export DWARFBOT_DISCORD_TOKEN=Bot_token_here
 export DWARFBOT_DISCORD_CHANNELS=123456789
-./dwarfbot
+./out/dwarfbot
 ```
 
 ## Acknowledgements

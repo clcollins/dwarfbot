@@ -14,6 +14,12 @@ DwarfBot supports configuration via CLI flags, environment variables
 (`DWARFBOT_` prefix), or a YAML config file (`~/.dwarfbot.yaml`).
 At least one platform (Twitch or Discord) must be configured.
 
+Note: Some older documents under `docs/` (for example,
+`docs/plan-discord-support.md`) describe legacy configuration keys and
+environment variables. Those documents are kept for historical context
+only and do not reflect the current configuration interface; the tables
+below are the authoritative reference.
+
 ### General Settings
 
 | Config Key | CLI Flag | Env Var | Default | Description |

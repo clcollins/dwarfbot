@@ -85,8 +85,15 @@ writes at runtime.
 - `make ci` passes all tests
 - Container builds: `podman build -f Containerfile -t dwarfbot:test .`
 - Read-only filesystem works:
-  `podman run --read-only --rm -e DWARFBOT_DISCORD_TOKEN=fake
-  -e DWARFBOT_DISCORD_CHANNELS=123 -e DWARFBOT_NAME=testbot dwarfbot:test`
+
+  ```sh
+  podman run --read-only --rm \
+    -e DWARFBOT_DISCORD_TOKEN=fake \
+    -e DWARFBOT_DISCORD_CHANNELS=123 \
+    -e DWARFBOT_NAME=testbot \
+    dwarfbot:test
+  ```
+
 - Help works: `podman run --read-only --rm dwarfbot:test --help`
 - Local dev with config file unchanged:
   `./out/dwarfbot --config ~/.dwarfbot.yaml`

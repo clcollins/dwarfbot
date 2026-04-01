@@ -264,9 +264,9 @@ func TestFlagsHaveUsageText(t *testing.T) {
 	}
 }
 
-// TestConfigKeyNamingConvention validates that all non-general flags follow
-// the DWARFBOT_<PROVIDER>_<ITEM> naming convention (provider-prefixed).
-func TestConfigKeyNamingConvention(t *testing.T) {
+// TestFlagNamingConvention validates that all non-general CLI flags follow
+// the <provider>-<item> naming convention (provider-prefixed).
+func TestFlagNamingConvention(t *testing.T) {
 	generalFlags := map[string]bool{
 		"config":       true,
 		"verbose":      true,
@@ -287,7 +287,7 @@ func TestConfigKeyNamingConvention(t *testing.T) {
 			}
 		}
 		if !hasPrefix {
-			t.Errorf("flag %q does not follow <provider>-<item> naming convention (expected prefix: %v)", f.Name, providerPrefixes)
+			t.Errorf("CLI flag %q does not follow <provider>-<item> naming convention (expected prefix: %v)", f.Name, providerPrefixes)
 		}
 	})
 }

@@ -38,14 +38,18 @@ distinguish "not found" from "parse error".
 Added `viper.SetEnvPrefix("DWARFBOT")` so environment variables
 use the `DWARFBOT_` prefix:
 
+_Updated: Config keys renamed for provider-prefix standardization.
+See `docs/plan-standardize-config-keys.md` for details._
+
 | Config Key | CLI Flag | Env Var |
 | --- | --- | --- |
 | `name` | `--name` | `DWARFBOT_NAME` |
-| `token` | _(config/env only)_ | `DWARFBOT_TOKEN` |
-| `channels` | `--channels` | `DWARFBOT_CHANNELS` |
-| `server` | `--server` | `DWARFBOT_SERVER` |
-| `port` | `--port` | `DWARFBOT_PORT` |
+| `twitch_token` | `--twitch-token` | `DWARFBOT_TWITCH_TOKEN` |
+| `twitch_channels` | `--twitch-channels` | `DWARFBOT_TWITCH_CHANNELS` |
+| `twitch_server` | `--twitch-server` | `DWARFBOT_TWITCH_SERVER` |
+| `twitch_port` | `--twitch-port` | `DWARFBOT_TWITCH_PORT` |
 | `verbose` | `--verbose` | `DWARFBOT_VERBOSE` |
+| `metrics_port` | `--metrics-port` | `DWARFBOT_METRICS_PORT` |
 | `discord_token` | `--discord-token` | `DWARFBOT_DISCORD_TOKEN` |
 | `discord_channels` | `--discord-channels` | `DWARFBOT_DISCORD_CHANNELS` |
 | `discord_admin_role` | `--discord-admin-role` | `DWARFBOT_DISCORD_ADMIN_ROLE` |
@@ -82,8 +86,7 @@ writes at runtime.
 - Container builds: `podman build -f Containerfile -t dwarfbot:test .`
 - Read-only filesystem works:
   `podman run --read-only --rm -e DWARFBOT_DISCORD_TOKEN=fake
-  -e DWARFBOT_DISCORD_CHANNELS=123 -e DWARFBOT_NAME=testbot
-  dwarfbot:test`
+  -e DWARFBOT_DISCORD_CHANNELS=123 -e DWARFBOT_NAME=testbot dwarfbot:test`
 - Help works: `podman run --read-only --rm dwarfbot:test --help`
 - Local dev with config file unchanged:
   `./out/dwarfbot --config ~/.dwarfbot.yaml`

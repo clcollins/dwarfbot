@@ -136,13 +136,14 @@ test-all: fmt vet lint go-test build checkmake mdlint yamllint kubeconform conta
 
 # --- CI targets ---
 
+# CI targets use podman directly (--userns=keep-id and :Z are podman-specific)
 .PHONY: ci-build
 ci-build:
-	$(CONTAINER_SUBSYS) build -f $(CI_CONTAINER_FILE) -t $(CI_IMAGE) .
+	podman build -f $(CI_CONTAINER_FILE) -t $(CI_IMAGE) .
 
 .PHONY: ci-all
 ci-all: ci-build
-	$(CONTAINER_SUBSYS) run --rm --userns=keep-id -v $$(pwd):/src:Z -w /src $(CI_IMAGE) make ci-checks
+	podman run --rm --userns=keep-id -v $$(pwd):/src:Z -w /src $(CI_IMAGE) make ci-checks
 
 .PHONY: ci-checks
 ci-checks: fmt-check vet lint go-test build checkmake mdlint yamllint kubeconform containerfile-check shellcheck doc-check

@@ -21,7 +21,14 @@ TRUSTED_REGISTRIES=(
 errors=0
 
 while IFS= read -r line; do
-  image="${line##*FROM }"
+  # Remove "FROM " prefix
+  args="${line##FROM }"
+  # Skip any flags (e.g., --platform=linux/amd64)
+  while [[ "${args}" == --* ]]; do
+    args="${args#* }"
+  done
+  # First remaining token is the image reference
+  image="${args%% *}"
   # Strip build stage alias (e.g., "as builder")
   image="${image%% as *}"
   image="${image%% AS *}"

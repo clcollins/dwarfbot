@@ -19,19 +19,29 @@ TRUSTED_REGISTRIES=(
 )
 
 errors=0
+found_from=false
 
+# Match FROM lines case-insensitively, allowing leading whitespace
 while IFS= read -r line; do
-  # Remove "FROM " prefix
-  args="${line##FROM }"
-  # Skip any flags (e.g., --platform=linux/amd64)
-  while [[ "${args}" == --* ]]; do
-    args="${args#* }"
+  found_from=true
+
+  # Tokenize the line and extract the image reference
+  # shellcheck disable=SC2206
+  tokens=(${line})
+  # Skip the first token (FROM) and any flags (--platform=..., etc.)
+  image=""
+  for ((i=1; i<${#tokens[@]}; i++)); do
+    if [[ "${tokens[$i]}" != --* ]]; then
+      image="${tokens[$i]}"
+      break
+    fi
   done
-  # First remaining token is the image reference
-  image="${args%% *}"
-  # Strip build stage alias (e.g., "as builder")
-  image="${image%% as *}"
-  image="${image%% AS *}"
+
+  if [[ -z "${image}" ]]; then
+    echo "ERROR: could not parse image from: ${line}"
+    errors=$((errors + 1))
+    continue
+  fi
 
   # Extract the image name after the last slash for tag/digest checks
   image_name="${image##*/}"
@@ -61,7 +71,12 @@ while IFS= read -r line; do
     errors=$((errors + 1))
   fi
 
-done < <(grep -E '^FROM ' "${CONTAINERFILE}")
+done < <(grep -iE '^\s*FROM\s' "${CONTAINERFILE}" || true)
+
+if [[ "${found_from}" == "false" ]]; then
+  echo "ERROR: no FROM lines found in ${CONTAINERFILE}"
+  exit 1
+fi
 
 if [[ ${errors} -gt 0 ]]; then
   echo "FAIL: ${errors} Containerfile validation error(s) found"

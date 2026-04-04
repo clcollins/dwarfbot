@@ -1,9 +1,13 @@
+-include .env
+
 CONTAINER_SUBSYS ?= podman
 NAME := dwarfbot
 PROJECT := clcollins
 IMAGE_REGISTRY := quay.io
 
 CONTAINER_FILE := Containerfile
+CI_CONTAINER_FILE := test/Containerfile.ci
+CI_IMAGE := $(NAME)-ci
 IMAGE_STRING := $(IMAGE_REGISTRY)/$(PROJECT)/$(NAME)
 
 GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -19,13 +23,22 @@ GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null)
 CHECKMAKE := $(shell command -v checkmake 2>/dev/null)
 
 .PHONY: all
-all: fmt vet lint test build
+all: fmt vet lint go-test build
 
 # --- Go targets ---
 
 .PHONY: fmt
 fmt:
 	$(GO) fmt ./...
+
+.PHONY: fmt-check
+fmt-check:
+	@output=$$(gofmt -l .); \
+	if [ -n "$$output" ]; then \
+		echo "Files not formatted:"; \
+		echo "$$output"; \
+		exit 1; \
+	fi
 
 .PHONY: vet
 vet:
@@ -40,8 +53,8 @@ else
 	@exit 1
 endif
 
-.PHONY: test
-test:
+.PHONY: go-test
+go-test:
 	$(GO) test -v -count=1 -race ./...
 
 .PHONY: test-cover
@@ -83,16 +96,64 @@ endif
 mdlint:
 	@command -v markdownlint-cli2 >/dev/null 2>&1 \
 		&& markdownlint-cli2 '**/*.md' '#node_modules' \
-		|| { echo "markdownlint-cli2 not found (install: npm install -g markdownlint-cli2)"; exit 1; }
+		|| { echo "markdownlint-cli2 not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
+
+.PHONY: kubeconform
+kubeconform:
+	@command -v kubeconform >/dev/null 2>&1 \
+		&& kubeconform -strict -ignore-missing-schemas deploy/ \
+		|| { echo "kubeconform not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
+
+.PHONY: yamllint
+yamllint:
+	@command -v yamllint >/dev/null 2>&1 \
+		&& yamllint -c .yamllint.yaml . \
+		|| { echo "yamllint not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
+
+.PHONY: doc-check
+doc-check:
+	@if [ ! -d docs/plans ]; then echo "ERROR: docs/plans/ directory not found"; exit 1; fi
+	@count=$$(find docs/plans -name '*.md' | wc -l); \
+	if [ "$$count" -eq 0 ]; then echo "ERROR: no plan documents found in docs/plans/"; exit 1; fi
+	@echo "OK: docs/plans/ contains plan documents"
+
+.PHONY: containerfile-check
+containerfile-check:
+	./test/validate-containerfile.sh $(CONTAINER_FILE)
+	./test/validate-containerfile.sh $(CI_CONTAINER_FILE)
+
+.PHONY: shellcheck
+shellcheck:
+	@command -v shellcheck >/dev/null 2>&1 \
+		&& find test/ -name '*.sh' -exec shellcheck {} + \
+		|| { echo "shellcheck not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
 
 # --- Aggregate targets ---
 
 .PHONY: test-all
-test-all: fmt vet lint test build checkmake mdlint image-build
+test-all: fmt vet lint go-test build checkmake mdlint yamllint kubeconform containerfile-check shellcheck doc-check image-build
 	@echo "All checks passed."
 
+# --- CI targets ---
+
+# CI targets use podman directly (--userns=keep-id and :Z are podman-specific)
+.PHONY: ci-build
+ci-build:
+	podman build -f $(CI_CONTAINER_FILE) -t $(CI_IMAGE) .
+
+.PHONY: ci-all
+ci-all: ci-build
+	podman run --rm --userns=keep-id -v $$(pwd):/src:Z -w /src $(CI_IMAGE) make ci-checks
+
+.PHONY: ci-checks
+ci-checks: fmt-check vet lint go-test build checkmake mdlint yamllint kubeconform containerfile-check shellcheck doc-check
+	@echo "All CI checks passed."
+
+.PHONY: test
+test: ci-all
+
 .PHONY: ci
-ci: fmt vet test build
+ci: fmt vet go-test build
 
 .PHONY: clean
 clean:

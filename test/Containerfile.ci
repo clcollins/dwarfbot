@@ -1,0 +1,32 @@
+FROM registry.fedoraproject.org/fedora-minimal:42
+
+RUN microdnf install -y \
+      golang \
+      gcc \
+      glibc-devel \
+      nodejs \
+      npm \
+      python3-pip \
+      ShellCheck \
+      make \
+      git \
+      findutils \
+    && microdnf clean all
+
+# Go-based linting tools (pinned versions for reproducibility)
+# Install to /usr/local/bin so tools are accessible when running as non-root
+ENV GOBIN=/usr/local/bin
+RUN go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6 \
+    && go install github.com/mrtazz/checkmake/cmd/checkmake@v0.2.2 \
+    && go install github.com/yannh/kubeconform/cmd/kubeconform@v0.6.7
+
+# Python-based linting tools (pinned for reproducibility)
+RUN pip install --break-system-packages yamllint==1.37.0
+
+# Node-based linting tools (pinned for reproducibility)
+RUN npm install -g markdownlint-cli2@0.20.0
+
+# Ensure Go caches are writable when running as non-root (--userns=keep-id)
+ENV GOPATH=/tmp/go GOCACHE=/tmp/go-cache
+
+WORKDIR /src

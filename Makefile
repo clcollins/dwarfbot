@@ -96,19 +96,19 @@ endif
 mdlint:
 	@command -v markdownlint-cli2 >/dev/null 2>&1 \
 		&& markdownlint-cli2 '**/*.md' '#node_modules' \
-		|| { echo "markdownlint-cli2 not found (install: npm install -g markdownlint-cli2)"; exit 1; }
+		|| { echo "markdownlint-cli2 not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
 
 .PHONY: kubeconform
 kubeconform:
 	@command -v kubeconform >/dev/null 2>&1 \
 		&& kubeconform -strict -ignore-missing-schemas deploy/ \
-		|| { echo "kubeconform not found (install: go install github.com/yannh/kubeconform/cmd/kubeconform@latest)"; exit 1; }
+		|| { echo "kubeconform not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
 
 .PHONY: yamllint
 yamllint:
 	@command -v yamllint >/dev/null 2>&1 \
 		&& yamllint -c .yamllint.yaml . \
-		|| { echo "yamllint not found (install: pip install yamllint)"; exit 1; }
+		|| { echo "yamllint not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
 
 .PHONY: doc-check
 doc-check:
@@ -120,12 +120,13 @@ doc-check:
 .PHONY: containerfile-check
 containerfile-check:
 	./test/validate-containerfile.sh $(CONTAINER_FILE)
+	./test/validate-containerfile.sh $(CI_CONTAINER_FILE)
 
 .PHONY: shellcheck
 shellcheck:
 	@command -v shellcheck >/dev/null 2>&1 \
 		&& find test/ -name '*.sh' -exec shellcheck {} + \
-		|| { echo "shellcheck not found (install: dnf install shellcheck)"; exit 1; }
+		|| { echo "shellcheck not found (use 'make ci-all' for a fully pinned toolchain)"; exit 1; }
 
 # --- Aggregate targets ---
 
@@ -141,7 +142,7 @@ ci-build:
 
 .PHONY: ci-all
 ci-all: ci-build
-	$(CONTAINER_SUBSYS) run --rm -v $$(pwd):/src:Z -w /src $(CI_IMAGE) make ci-checks
+	$(CONTAINER_SUBSYS) run --rm --userns=keep-id -v $$(pwd):/src:Z -w /src $(CI_IMAGE) make ci-checks
 
 .PHONY: ci-checks
 ci-checks: fmt-check vet lint go-test build checkmake mdlint yamllint kubeconform containerfile-check shellcheck doc-check

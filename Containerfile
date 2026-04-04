@@ -7,7 +7,7 @@ RUN out/dwarfbot --help
 
 
 # Build the final image
-FROM registry.access.redhat.com/ubi9/ubi-minimal
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.6
 
 ARG BUILD_DATE="1970-01-01T00:00:00Z"
 ARG VCS_REF="unknown"

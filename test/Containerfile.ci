@@ -1,0 +1,28 @@
+FROM registry.fedoraproject.org/fedora-minimal:42
+
+RUN microdnf install -y \
+      golang \
+      nodejs \
+      npm \
+      python3-pip \
+      ShellCheck \
+      make \
+      git \
+      findutils \
+    && microdnf clean all
+
+# Go-based linting tools
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest \
+    && go install github.com/checkmake/checkmake/cmd/checkmake@latest \
+    && go install github.com/yannh/kubeconform/cmd/kubeconform@latest
+
+# Python-based linting tools
+RUN pip install --break-system-packages yamllint
+
+# Node-based linting tools
+RUN npm install -g markdownlint-cli2
+
+# Ensure Go-installed binaries are in PATH
+ENV PATH="/root/go/bin:${PATH}"
+
+WORKDIR /src

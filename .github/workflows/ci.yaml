@@ -7,65 +7,89 @@ on:
     branches: [main, master]
 
 env:
-  GO_VERSION: "1.25"
   CONTAINER_SUBSYS: podman
   IMAGE_REGISTRY: quay.io
   IMAGE_NAME: quay.io/clcollins/dwarfbot
+  CI_IMAGE: dwarfbot-ci
 
 jobs:
-  fmt:
-    name: Go Format
+  ci-build:
+    name: Build CI Container
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Build CI container image
+        run: podman build -f test/Containerfile.ci -t ${{ env.CI_IMAGE }} .
+      - name: Save CI image
+        run: podman save ${{ env.CI_IMAGE }} -o /tmp/ci-image.tar
+      - name: Upload CI image artifact
+        uses: actions/upload-artifact@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          name: ci-image
+          path: /tmp/ci-image.tar
+          retention-days: 1
+
+  fmt:
+    name: Go Format
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
       - name: Check formatting
-        run: |
-          output=$(gofmt -l .)
-          if [ -n "$output" ]; then
-            echo "Files not formatted:"
-            echo "$output"
-            exit 1
-          fi
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make fmt
 
   vet:
     name: Go Vet
+    needs: ci-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/download-artifact@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
       - name: Run go vet
-        run: go vet ./...
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make vet
 
   lint:
     name: Go Lint
+    needs: ci-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/download-artifact@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: latest
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make lint
 
-  test:
+  go-test:
     name: Go Test
+    needs: ci-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/download-artifact@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
       - name: Run tests with race detector
-        run: go test -v -count=1 -race ./...
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make go-test
       - name: Run tests with coverage
-        run: go test -coverprofile=coverage.txt -count=1 ./...
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} go test -coverprofile=coverage.txt -count=1 ./...
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -73,26 +97,131 @@ jobs:
 
   build:
     name: Go Build
+    needs: ci-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/download-artifact@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
       - name: Build binary
-        run: mkdir -p out && go build -o out/dwarfbot .
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make build
       - name: Verify binary runs
-        run: ./out/dwarfbot --help
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} ./out/dwarfbot --help
+
+  checkmake:
+    name: Makefile Lint
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
+      - name: Run checkmake
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make checkmake
+
+  mdlint:
+    name: Markdown Lint
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
+      - name: Run markdownlint
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make mdlint
+
+  yamllint:
+    name: YAML Lint
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
+      - name: Run yamllint
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make yamllint
+
+  kubeconform:
+    name: Kubernetes Manifest Validation
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
+      - name: Validate manifests
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make kubeconform
+
+  containerfile-check:
+    name: Containerfile Validation
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
+      - name: Validate Containerfile
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make containerfile-check
+
+  shellcheck:
+    name: Shell Lint
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
+      - name: Run shellcheck
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make shellcheck
+
+  doc-check:
+    name: Documentation Check
+    needs: ci-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-image
+          path: /tmp
+      - name: Load CI image
+        run: podman load -i /tmp/ci-image.tar
+      - name: Check plan documents
+        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make doc-check
 
   image-build:
     name: Container Image Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Podman
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y podman
       - name: Build container image
         run: |
           podman build -f Containerfile \
@@ -111,26 +240,3 @@ jobs:
           echo "All OCI labels validated successfully."
       - name: Validate image runs
         run: podman run --rm ${{ env.IMAGE_NAME }}:ci --help
-
-  checkmake:
-    name: Makefile Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: Install checkmake
-        run: go install github.com/checkmake/checkmake/cmd/checkmake@latest
-      - name: Run checkmake
-        run: checkmake Makefile
-
-  mdlint:
-    name: Markdown Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install markdownlint-cli2
-        run: npm install -g markdownlint-cli2
-      - name: Run markdownlint
-        run: markdownlint-cli2 '**/*.md' '#node_modules'

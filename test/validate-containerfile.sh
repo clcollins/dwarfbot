@@ -1,0 +1,62 @@
+#!/bin/bash
+# Validate Containerfile base images use pinned tags from trusted registries.
+
+set -euo pipefail
+
+CONTAINERFILE="${1:-Containerfile}"
+
+if [[ ! -f "${CONTAINERFILE}" ]]; then
+  echo "ERROR: ${CONTAINERFILE} not found"
+  exit 1
+fi
+
+TRUSTED_REGISTRIES=(
+  "registry.access.redhat.com"
+  "registry.redhat.io"
+  "registry.fedoraproject.org"
+  "quay.io"
+  "ghcr.io"
+)
+
+errors=0
+
+while IFS= read -r line; do
+  image="${line##*FROM }"
+  # Strip build stage alias (e.g., "as builder")
+  image="${image%% as *}"
+  image="${image%% AS *}"
+
+  # Check for :latest tag
+  if [[ "${image}" == *":latest" ]]; then
+    echo "ERROR: :latest tag used: ${image}"
+    errors=$((errors + 1))
+  fi
+
+  # Check for missing tag (no colon means implicit :latest)
+  if [[ "${image}" != *":"* ]]; then
+    echo "ERROR: no tag specified (implicit :latest): ${image}"
+    errors=$((errors + 1))
+  fi
+
+  # Check for trusted registry
+  trusted=false
+  for registry in "${TRUSTED_REGISTRIES[@]}"; do
+    if [[ "${image}" == "${registry}/"* ]]; then
+      trusted=true
+      break
+    fi
+  done
+
+  if [[ "${trusted}" == "false" ]]; then
+    echo "ERROR: untrusted registry: ${image}"
+    errors=$((errors + 1))
+  fi
+
+done < <(grep -E '^FROM ' "${CONTAINERFILE}")
+
+if [[ ${errors} -gt 0 ]]; then
+  echo "FAIL: ${errors} Containerfile validation error(s) found"
+  exit 1
+fi
+
+echo "OK: Containerfile validation passed"

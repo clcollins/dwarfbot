@@ -6,5 +6,8 @@ img/
 deploy/
 *.md
 LICENSE
+test/
 .markdownlint.yaml
+.yamllint.yaml
 .dwarfbot.yaml
+.env

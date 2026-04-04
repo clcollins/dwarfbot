@@ -26,14 +26,16 @@ while IFS= read -r line; do
   image="${image%% as *}"
   image="${image%% AS *}"
 
-  # Check for :latest tag
-  if [[ "${image}" == *":latest" ]]; then
+  # Extract the image name after the last slash for tag/digest checks
+  image_name="${image##*/}"
+
+  # Digest-pinned images (@sha256:...) are acceptable
+  if [[ "${image}" == *"@sha256:"* ]]; then
+    : # pinned by digest, acceptable
+  elif [[ "${image_name}" == *":latest" ]]; then
     echo "ERROR: :latest tag used: ${image}"
     errors=$((errors + 1))
-  fi
-
-  # Check for missing tag (no colon means implicit :latest)
-  if [[ "${image}" != *":"* ]]; then
+  elif [[ "${image_name}" != *":"* ]]; then
     echo "ERROR: no tag specified (implicit :latest): ${image}"
     errors=$((errors + 1))
   fi

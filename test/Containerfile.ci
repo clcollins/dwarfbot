@@ -11,10 +11,10 @@ RUN microdnf install -y \
       findutils \
     && microdnf clean all
 
-# Go-based linting tools
-RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest \
-    && go install github.com/checkmake/checkmake/cmd/checkmake@latest \
-    && go install github.com/yannh/kubeconform/cmd/kubeconform@latest
+# Go-based linting tools (pinned versions for reproducibility)
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.1.6 \
+    && go install github.com/checkmake/checkmake/cmd/checkmake@v0.2.2 \
+    && go install github.com/yannh/kubeconform/cmd/kubeconform@v0.6.7
 
 # Python-based linting tools
 RUN pip install --break-system-packages yamllint

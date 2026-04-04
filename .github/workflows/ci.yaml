@@ -50,7 +50,9 @@ jobs:
       - name: Load CI image
         run: podman load -i /tmp/ci-image.tar
       - name: Check formatting
-        run: podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make fmt
+        run: |
+          podman run --rm -v $(pwd):/src:Z -w /src ${{ env.CI_IMAGE }} make fmt
+          git diff --exit-code
 
   vet:
     name: Go Vet

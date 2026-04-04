@@ -2,6 +2,8 @@ FROM registry.fedoraproject.org/fedora-minimal:42
 
 RUN microdnf install -y \
       golang \
+      gcc \
+      glibc-devel \
       nodejs \
       npm \
       python3-pip \

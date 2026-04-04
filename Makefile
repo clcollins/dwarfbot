@@ -31,6 +31,15 @@ all: fmt vet lint go-test build
 fmt:
 	$(GO) fmt ./...
 
+.PHONY: fmt-check
+fmt-check:
+	@output=$$(gofmt -l .); \
+	if [ -n "$$output" ]; then \
+		echo "Files not formatted:"; \
+		echo "$$output"; \
+		exit 1; \
+	fi
+
 .PHONY: vet
 vet:
 	$(GO) vet ./...
@@ -135,7 +144,7 @@ ci-all: ci-build
 	$(CONTAINER_SUBSYS) run --rm -v $$(pwd):/src:Z -w /src $(CI_IMAGE) make ci-checks
 
 .PHONY: ci-checks
-ci-checks: fmt vet lint go-test build checkmake mdlint yamllint kubeconform containerfile-check shellcheck doc-check
+ci-checks: fmt-check vet lint go-test build checkmake mdlint yamllint kubeconform containerfile-check shellcheck doc-check
 	@echo "All CI checks passed."
 
 .PHONY: test

@@ -71,7 +71,7 @@ while IFS= read -r line; do
     errors=$((errors + 1))
   fi
 
-done < <(grep -iE '^\s*FROM\s' "${CONTAINERFILE}" || true)
+done < <(grep -iE '^[[:space:]]*FROM[[:space:]]' "${CONTAINERFILE}" || true)
 
 if [[ "${found_from}" == "false" ]]; then
   echo "ERROR: no FROM lines found in ${CONTAINERFILE}"

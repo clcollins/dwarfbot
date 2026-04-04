@@ -63,10 +63,10 @@ var rootCmd = &cobra.Command{
 		metricsPort := viper.GetString("metrics_port")
 
 		// Twitch config
-		twitchToken := viper.GetString("token")
-		twitchChannels := viper.GetStringSlice("channels")
-		server := viper.GetString("server")
-		port := viper.GetString("port")
+		twitchToken := viper.GetString("twitch_token")
+		twitchChannels := viper.GetStringSlice("twitch_channels")
+		server := viper.GetString("twitch_server")
+		port := viper.GetString("twitch_port")
 
 		// Discord config
 		discordToken := viper.GetString("discord_token")
@@ -77,7 +77,7 @@ var rootCmd = &cobra.Command{
 		discordEnabled := discordToken != "" && len(discordChannels) > 0
 
 		if !twitchEnabled && !discordEnabled {
-			log.Fatal("At least one platform must be configured (Twitch: token + channels, Discord: discord_token + discord_channels)")
+			log.Fatal("At least one platform must be configured. Twitch: provide --twitch-token and --twitch-channels (or DWARFBOT_TWITCH_TOKEN and DWARFBOT_TWITCH_CHANNELS). Discord: provide --discord-token and --discord-channels (or DWARFBOT_DISCORD_TOKEN and DWARFBOT_DISCORD_CHANNELS).")
 		}
 
 		// Initialize metrics
@@ -202,14 +202,17 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.dwarfbot.yaml)")
 
 	// Twitch configuration
-	rootCmd.PersistentFlags().StringP("server", "s", twitchChatServer, fmt.Sprintf("Twitch IRC server (default: %s)", twitchChatServer))
-	cobra.CheckErr(viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server")))
+	rootCmd.PersistentFlags().String("twitch-token", "", "Twitch OAuth token")
+	cobra.CheckErr(viper.BindPFlag("twitch_token", rootCmd.PersistentFlags().Lookup("twitch-token")))
 
-	rootCmd.PersistentFlags().StringP("port", "p", twitchChatPort, fmt.Sprintf("Twitch IRC port (default: %s)", twitchChatPort))
-	cobra.CheckErr(viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port")))
+	rootCmd.PersistentFlags().String("twitch-server", twitchChatServer, fmt.Sprintf("Twitch IRC server (default: %s)", twitchChatServer))
+	cobra.CheckErr(viper.BindPFlag("twitch_server", rootCmd.PersistentFlags().Lookup("twitch-server")))
 
-	rootCmd.PersistentFlags().StringSliceP("channels", "c", []string{}, "Twitch channels to participate in")
-	cobra.CheckErr(viper.BindPFlag("channels", rootCmd.PersistentFlags().Lookup("channels")))
+	rootCmd.PersistentFlags().String("twitch-port", twitchChatPort, fmt.Sprintf("Twitch IRC port (default: %s)", twitchChatPort))
+	cobra.CheckErr(viper.BindPFlag("twitch_port", rootCmd.PersistentFlags().Lookup("twitch-port")))
+
+	rootCmd.PersistentFlags().StringSlice("twitch-channels", []string{}, "Twitch channels to participate in")
+	cobra.CheckErr(viper.BindPFlag("twitch_channels", rootCmd.PersistentFlags().Lookup("twitch-channels")))
 
 	// General configuration
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "enable verbose logging")

@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -42,9 +44,10 @@ func TestRootCommandHasFlags(t *testing.T) {
 		shorthand string
 	}{
 		{"config", ""},
-		{"server", "s"},
-		{"port", "p"},
-		{"channels", "c"},
+		{"twitch-token", ""},
+		{"twitch-server", ""},
+		{"twitch-port", ""},
+		{"twitch-channels", ""},
 		{"verbose", "v"},
 		{"name", "n"},
 		{"discord-token", ""},
@@ -59,7 +62,7 @@ func TestRootCommandHasFlags(t *testing.T) {
 			if flag == nil {
 				t.Fatalf("expected flag %q to exist", f.name)
 			}
-			if f.shorthand != "" && flag.Shorthand != f.shorthand {
+			if flag.Shorthand != f.shorthand {
 				t.Errorf("expected shorthand %q, got %q", f.shorthand, flag.Shorthand)
 			}
 		})
@@ -75,20 +78,30 @@ func TestDefaultServerAndPort(t *testing.T) {
 	}
 }
 
-func TestServerFlagDefault(t *testing.T) {
-	flag := rootCmd.PersistentFlags().Lookup("server")
+func TestTwitchTokenFlagDefault(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("twitch-token")
 	if flag == nil {
-		t.Fatal("server flag not found")
+		t.Fatal("twitch-token flag not found")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("expected empty twitch-token default, got %q", flag.DefValue)
+	}
+}
+
+func TestTwitchServerFlagDefault(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("twitch-server")
+	if flag == nil {
+		t.Fatal("twitch-server flag not found")
 	}
 	if flag.DefValue != twitchChatServer {
 		t.Errorf("expected server default %q, got %q", twitchChatServer, flag.DefValue)
 	}
 }
 
-func TestPortFlagDefault(t *testing.T) {
-	flag := rootCmd.PersistentFlags().Lookup("port")
+func TestTwitchPortFlagDefault(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("twitch-port")
 	if flag == nil {
-		t.Fatal("port flag not found")
+		t.Fatal("twitch-port flag not found")
 	}
 	if flag.DefValue != twitchChatPort {
 		t.Errorf("expected port default %q, got %q", twitchChatPort, flag.DefValue)
@@ -115,13 +128,13 @@ func TestNameFlagDefault(t *testing.T) {
 	}
 }
 
-func TestChannelsFlagDefault(t *testing.T) {
-	flag := rootCmd.PersistentFlags().Lookup("channels")
+func TestTwitchChannelsFlagDefault(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("twitch-channels")
 	if flag == nil {
-		t.Fatal("channels flag not found")
+		t.Fatal("twitch-channels flag not found")
 	}
 	if flag.DefValue != "[]" {
-		t.Errorf("expected '[]' channels default, got %q", flag.DefValue)
+		t.Errorf("expected '[]' twitch-channels default, got %q", flag.DefValue)
 	}
 }
 
@@ -195,7 +208,7 @@ func TestInitConfig_NoConfigFile(t *testing.T) {
 func TestInitConfig_EnvVarPrefix(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DWARFBOT_NAME", "envbot")
-	t.Setenv("DWARFBOT_TOKEN", "env-test-token")
+	t.Setenv("DWARFBOT_TWITCH_TOKEN", "env-test-token")
 	savedCfgFile := cfgFile
 	cfgFile = ""
 	defer func() { cfgFile = savedCfgFile }()
@@ -206,8 +219,8 @@ func TestInitConfig_EnvVarPrefix(t *testing.T) {
 	if got := viper.GetString("name"); got != "envbot" {
 		t.Errorf("expected DWARFBOT_NAME to set name='envbot', got %q", got)
 	}
-	if got := viper.GetString("token"); got != "env-test-token" {
-		t.Errorf("expected DWARFBOT_TOKEN to set token='env-test-token', got %q", got)
+	if got := viper.GetString("twitch_token"); got != "env-test-token" {
+		t.Errorf("expected DWARFBOT_TWITCH_TOKEN to set twitch_token='env-test-token', got %q", got)
 	}
 }
 
@@ -234,7 +247,8 @@ func TestInitConfig_DiscordEnvVars(t *testing.T) {
 
 func TestFlagsHaveUsageText(t *testing.T) {
 	flagNames := []string{
-		"server", "port", "channels", "verbose", "name",
+		"twitch-token", "twitch-server", "twitch-port", "twitch-channels",
+		"verbose", "name",
 		"discord-token", "discord-channels", "discord-admin-role",
 	}
 	for _, name := range flagNames {
@@ -248,4 +262,32 @@ func TestFlagsHaveUsageText(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFlagNamingConvention validates that all non-general CLI flags follow
+// the <provider>-<item> naming convention (provider-prefixed).
+func TestFlagNamingConvention(t *testing.T) {
+	generalFlags := map[string]bool{
+		"config":       true,
+		"verbose":      true,
+		"name":         true,
+		"metrics-port": true,
+	}
+	providerPrefixes := []string{"twitch-", "discord-"}
+
+	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		if generalFlags[f.Name] {
+			return
+		}
+		hasPrefix := false
+		for _, p := range providerPrefixes {
+			if strings.HasPrefix(f.Name, p) {
+				hasPrefix = true
+				break
+			}
+		}
+		if !hasPrefix {
+			t.Errorf("CLI flag %q does not follow <provider>-<item> naming convention (expected prefix: %v)", f.Name, providerPrefixes)
+		}
+	})
 }

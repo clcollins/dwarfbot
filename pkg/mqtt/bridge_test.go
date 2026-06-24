@@ -522,3 +522,417 @@ func TestBridge_Status_WithBufferedMessages(t *testing.T) {
 		t.Errorf("expected buffer depth 2, got %d", status.BufferDepth)
 	}
 }
+
+// --- Bridge lifecycle tests (with mock MQTT client) ---
+
+func newTestBridge(t *testing.T, client *mockClient, collector *messageCollector) (*Bridge, *BridgeMetrics) {
+	t.Helper()
+	reg := prometheus.NewRegistry()
+	m := NewBridgeMetrics(reg)
+	cfg := Config{
+		Enabled:          true,
+		Broker:           "tcp://test:1883",
+		ClientID:         "test",
+		Topics:           []string{"home/#", "ai/#"},
+		DiscordChannels:  []string{"ch1"},
+		FlushSeconds:     5,
+		MaxBuffer:        100,
+		MaxPayloadBytes:  256,
+		MaxPostsPerFlush: 5,
+	}
+	b := NewBridgeWithFactory(cfg, collector.post, m, mockFactory(client))
+	return b, m
+}
+
+func TestNewBridge_SetsDefaults(t *testing.T) {
+	collector := &messageCollector{}
+	reg := prometheus.NewRegistry()
+	m := NewBridgeMetrics(reg)
+	cfg := Config{
+		Enabled:          true,
+		MaxBuffer:        50,
+		MaxPayloadBytes:  128,
+		MaxPostsPerFlush: 3,
+	}
+	b := NewBridge(cfg, collector.post, m)
+	if b.buffer == nil {
+		t.Error("expected buffer to be initialized")
+	}
+	if !b.enabled {
+		t.Error("expected enabled=true from config")
+	}
+	if b.clientFactory == nil {
+		t.Error("expected default client factory")
+	}
+}
+
+func TestBridge_Start_ConnectsAndSubscribes(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	if err := b.Start(); err != nil {
+		t.Fatalf("Start() returned error: %v", err)
+	}
+	defer b.Stop()
+
+	if !client.IsConnected() {
+		t.Error("expected client to be connected after Start()")
+	}
+
+	subs := client.getSubscriptions()
+	if len(subs) != 2 {
+		t.Fatalf("expected 2 subscriptions, got %d", len(subs))
+	}
+	if subs[0] != "home/#" || subs[1] != "ai/#" {
+		t.Errorf("expected [home/# ai/#], got %v", subs)
+	}
+
+	status := b.Status()
+	if !status.Connected {
+		t.Error("expected connected=true in status")
+	}
+	if !status.Enabled {
+		t.Error("expected enabled=true in status")
+	}
+}
+
+func TestBridge_Start_ConnectFailure_NotifiesDiscord(t *testing.T) {
+	client := newMockClient(fmt.Errorf("connection refused"))
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	if err := b.Start(); err != nil {
+		t.Fatalf("Start() should not return error even on connect failure: %v", err)
+	}
+	defer b.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	msgs := collector.getMessages()
+	found := false
+	for _, m := range msgs {
+		if strings.Contains(m.msg, "failed to connect") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected Discord notification about connection failure")
+	}
+}
+
+func TestBridge_Stop_DisconnectsClient(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, m := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	b.Stop()
+
+	if client.IsConnected() {
+		t.Error("expected client disconnected after Stop()")
+	}
+	if client.getDisconnectCalls() != 1 {
+		t.Errorf("expected 1 disconnect call, got %d", client.getDisconnectCalls())
+	}
+	if v := testutil.ToFloat64(m.Connected); v != 0 {
+		t.Errorf("expected connected metric=0 after stop, got %f", v)
+	}
+}
+
+func TestBridge_Stop_DoubleStopSafe(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	b.Stop()
+	b.Stop()
+
+	if client.getDisconnectCalls() != 1 {
+		t.Errorf("expected 1 disconnect call on double stop, got %d", client.getDisconnectCalls())
+	}
+}
+
+func TestBridge_MessageHandler_BuffersMessage(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, m := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	msg := &mockMessage{topic: "home/temp", payload: []byte("22.5")}
+	b.messageHandler(nil, msg)
+
+	if b.buffer.Len() != 1 {
+		t.Errorf("expected 1 buffered message, got %d", b.buffer.Len())
+	}
+	if v := testutil.ToFloat64(m.MessagesReceived); v != 1 {
+		t.Errorf("expected 1 received metric, got %f", v)
+	}
+}
+
+func TestBridge_MessageHandler_DisabledDrops(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, m := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	b.Disable()
+	msg := &mockMessage{topic: "home/temp", payload: []byte("22.5")}
+	b.messageHandler(nil, msg)
+
+	if b.buffer.Len() != 0 {
+		t.Errorf("expected 0 buffered messages when disabled, got %d", b.buffer.Len())
+	}
+	if v := testutil.ToFloat64(m.MessagesReceived); v != 0 {
+		t.Errorf("expected 0 received metric when disabled, got %f", v)
+	}
+}
+
+func TestBridge_MessageHandler_TruncatesPayload(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+	b.config.MaxPayloadBytes = 10
+
+	_ = b.Start()
+	defer b.Stop()
+
+	msg := &mockMessage{topic: "t", payload: []byte("this is a long payload that should be truncated")}
+	b.messageHandler(nil, msg)
+
+	msgs := b.buffer.Flush()
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if len(msgs[0].Payload) > 10+len("…") {
+		t.Errorf("expected payload truncated to ~10 chars, got %d: %q", len(msgs[0].Payload), msgs[0].Payload)
+	}
+}
+
+func TestBridge_MessageHandler_RecordsDropMetric(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, m := newTestBridge(t, client, collector)
+	b.config.MaxBuffer = 2
+	b.buffer = NewBuffer(2)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	for i := range 5 {
+		msg := &mockMessage{topic: fmt.Sprintf("t/%d", i), payload: []byte("x")}
+		b.messageHandler(nil, msg)
+	}
+
+	if v := testutil.ToFloat64(m.MessagesDropped); v != 3 {
+		t.Errorf("expected 3 dropped, got %f", v)
+	}
+}
+
+func TestBridge_Flush_PostsToDiscord(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, m := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	b.buffer.Add("home/temp", "22.5", time.Now())
+	b.buffer.Add("home/humid", "55", time.Now())
+
+	b.flush()
+
+	msgs := collector.getMessages()
+	if len(msgs) == 0 {
+		t.Fatal("expected flush to post to Discord")
+	}
+	if msgs[0].channel != "ch1" {
+		t.Errorf("expected channel 'ch1', got %q", msgs[0].channel)
+	}
+	if !strings.Contains(msgs[0].msg, "home/temp") {
+		t.Errorf("expected message to contain topic, got %q", msgs[0].msg)
+	}
+	if v := testutil.ToFloat64(m.MessagesForwarded); v == 0 {
+		t.Error("expected forwarded metric > 0")
+	}
+}
+
+func TestBridge_Flush_WhenDisabled_NoOp(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	b.Disable()
+	b.buffer.Add("home/temp", "22.5", time.Now())
+
+	b.flush()
+
+	msgs := collector.getMessages()
+	if len(msgs) != 0 {
+		t.Errorf("expected no flush when disabled, got %d messages", len(msgs))
+	}
+}
+
+func TestBridge_Flush_EmptyBuffer_NoOp(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	b.flush()
+
+	msgs := collector.getMessages()
+	if len(msgs) != 0 {
+		t.Errorf("expected no flush for empty buffer, got %d messages", len(msgs))
+	}
+}
+
+func TestBridge_Flush_PostError_DoesNotPanic(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+	b.postFunc = collector.postErr
+
+	_ = b.Start()
+	defer b.Stop()
+
+	b.buffer.Add("home/temp", "22.5", time.Now())
+	b.flush()
+}
+
+func TestBridge_NotifyDiscord_PostsToAllChannels(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+	b.config.DiscordChannels = []string{"ch1", "ch2"}
+
+	b.notifyDiscord("test alert")
+
+	msgs := collector.getMessages()
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages (one per channel), got %d", len(msgs))
+	}
+	if msgs[0].channel != "ch1" || msgs[1].channel != "ch2" {
+		t.Errorf("expected channels [ch1, ch2], got [%s, %s]", msgs[0].channel, msgs[1].channel)
+	}
+}
+
+func TestBridge_OnConnectionLost_SetsDisconnected(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, m := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	b.onConnectionLost(nil, fmt.Errorf("network error"))
+
+	time.Sleep(50 * time.Millisecond)
+
+	status := b.Status()
+	if status.Connected {
+		t.Error("expected connected=false after connection lost")
+	}
+	if v := testutil.ToFloat64(m.Connected); v != 0 {
+		t.Errorf("expected connected metric=0, got %f", v)
+	}
+
+	msgs := collector.getMessages()
+	found := false
+	for _, msg := range msgs {
+		if strings.Contains(msg.msg, "connection lost") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected Discord notification about connection loss")
+	}
+}
+
+func TestBridge_OnConnect_SetsConnectedAndSubscribes(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, m := newTestBridge(t, client, collector)
+
+	_ = b.Start()
+	defer b.Stop()
+
+	subsBefore := len(client.getSubscriptions())
+	b.onConnect(nil)
+
+	if v := testutil.ToFloat64(m.Connected); v != 1 {
+		t.Errorf("expected connected metric=1 after onConnect, got %f", v)
+	}
+
+	subsAfter := len(client.getSubscriptions())
+	if subsAfter-subsBefore != 2 {
+		t.Errorf("expected 2 new subscriptions on reconnect, got %d", subsAfter-subsBefore)
+	}
+}
+
+func TestBridge_FlushLoop_StopsOnStopCh(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+	b.config.FlushSeconds = 1
+
+	_ = b.Start()
+
+	time.Sleep(50 * time.Millisecond)
+	b.Stop()
+}
+
+func TestBridge_Subscribe_RecordsTopics(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+	b.client = client
+
+	b.subscribe()
+
+	subs := client.getSubscriptions()
+	if len(subs) != 2 {
+		t.Fatalf("expected 2 subscriptions, got %d", len(subs))
+	}
+}
+
+func TestBridge_Subscribe_HandleError(t *testing.T) {
+	client := newMockClient(nil)
+	client.subscribeErr = fmt.Errorf("subscribe failed")
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+	b.client = client
+
+	b.subscribe()
+}
+
+func TestNewBridgeWithFactory_UsesCustomFactory(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	reg := prometheus.NewRegistry()
+	m := NewBridgeMetrics(reg)
+	cfg := Config{
+		Enabled:          true,
+		Broker:           "tcp://test:1883",
+		MaxBuffer:        10,
+		MaxPayloadBytes:  128,
+		MaxPostsPerFlush: 3,
+		FlushSeconds:     5,
+	}
+	b := NewBridgeWithFactory(cfg, collector.post, m, mockFactory(client))
+	if b.clientFactory == nil {
+		t.Error("expected custom factory to be set")
+	}
+}

@@ -19,25 +19,38 @@ type BridgeStatus struct {
 }
 
 type Bridge struct {
-	config    Config
-	buffer    *Buffer
-	metrics   *BridgeMetrics
-	postFunc  PostFunc
-	client    pahomqtt.Client
-	mu        sync.Mutex
-	enabled   bool
-	connected bool
-	stopCh    chan struct{}
-	stopped   bool
+	config        Config
+	buffer        *Buffer
+	metrics       *BridgeMetrics
+	postFunc      PostFunc
+	clientFactory ClientFactory
+	client        MQTTClient
+	mu            sync.Mutex
+	enabled       bool
+	connected     bool
+	stopCh        chan struct{}
+	stopped       bool
 }
 
 func NewBridge(cfg Config, postFunc PostFunc, metrics *BridgeMetrics) *Bridge {
 	return &Bridge{
-		config:   cfg,
-		buffer:   NewBuffer(cfg.MaxBuffer),
-		metrics:  metrics,
-		postFunc: postFunc,
-		enabled:  cfg.Enabled,
+		config:        cfg,
+		buffer:        NewBuffer(cfg.MaxBuffer),
+		metrics:       metrics,
+		postFunc:      postFunc,
+		clientFactory: DefaultClientFactory,
+		enabled:       cfg.Enabled,
+	}
+}
+
+func NewBridgeWithFactory(cfg Config, postFunc PostFunc, metrics *BridgeMetrics, factory ClientFactory) *Bridge {
+	return &Bridge{
+		config:        cfg,
+		buffer:        NewBuffer(cfg.MaxBuffer),
+		metrics:       metrics,
+		postFunc:      postFunc,
+		clientFactory: factory,
+		enabled:       cfg.Enabled,
 	}
 }
 
@@ -85,21 +98,7 @@ func (b *Bridge) Stop() {
 }
 
 func (b *Bridge) connect() error {
-	opts := pahomqtt.NewClientOptions().
-		AddBroker(b.config.Broker).
-		SetClientID(b.config.ClientID).
-		SetAutoReconnect(true).
-		SetConnectionLostHandler(b.onConnectionLost).
-		SetOnConnectHandler(b.onConnect)
-
-	if b.config.Username != "" {
-		opts.SetUsername(b.config.Username)
-	}
-	if b.config.Password != "" {
-		opts.SetPassword(b.config.Password)
-	}
-
-	b.client = pahomqtt.NewClient(opts)
+	b.client = b.clientFactory(b.config, b.onConnectionLost, b.onConnect)
 	token := b.client.Connect()
 	token.Wait()
 	if err := token.Error(); err != nil {
@@ -239,7 +238,6 @@ func (b *Bridge) flush() {
 	chunks := FormatDigest(msgs, 1900, b.config.MaxPostsPerFlush)
 
 	forwarded := 0
-	suppressed := 0
 	for _, chunk := range chunks {
 		for _, ch := range b.config.DiscordChannels {
 			if err := b.postFunc(ch, chunk); err != nil {
@@ -251,9 +249,6 @@ func (b *Bridge) flush() {
 
 	if b.metrics != nil {
 		b.metrics.RecordForwarded(forwarded)
-		if suppressed > 0 {
-			b.metrics.RecordSuppressed(suppressed)
-		}
 	}
 }
 

@@ -27,6 +27,7 @@ import (
 	"context"
 	"dwarfbot/pkg/dwarfbot"
 	"dwarfbot/pkg/metrics"
+	"dwarfbot/pkg/mqtt"
 	"errors"
 	"fmt"
 	"log"
@@ -34,6 +35,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -80,6 +82,33 @@ var rootCmd = &cobra.Command{
 			log.Fatal("At least one platform must be configured. Twitch: provide --twitch-token and --twitch-channels (or DWARFBOT_TWITCH_TOKEN and DWARFBOT_TWITCH_CHANNELS). Discord: provide --discord-token and --discord-channels (or DWARFBOT_DISCORD_TOKEN and DWARFBOT_DISCORD_CHANNELS).")
 		}
 
+		// MQTT config
+		mqttDiscordChannels := viper.GetStringSlice("mqtt_discord_channels")
+		if len(mqttDiscordChannels) == 0 {
+			mqttDiscordChannels = discordChannels
+		}
+		mqttConfig := mqtt.Config{
+			Enabled:          viper.GetBool("mqtt_enabled"),
+			Broker:           viper.GetString("mqtt_broker"),
+			Username:         viper.GetString("mqtt_username"),
+			Password:         viper.GetString("mqtt_password"),
+			ClientID:         viper.GetString("mqtt_client_id"),
+			Topics:           viper.GetStringSlice("mqtt_topics"),
+			DiscordChannels:  mqttDiscordChannels,
+			FlushSeconds:     viper.GetInt("mqtt_flush_seconds"),
+			MaxBuffer:        viper.GetInt("mqtt_max_buffer"),
+			MaxPayloadBytes:  viper.GetInt("mqtt_max_payload_bytes"),
+			MaxPostsPerFlush: viper.GetInt("mqtt_max_posts_per_flush"),
+		}
+
+		if err := mqtt.ValidateConfig(mqttConfig, discordEnabled); err != nil {
+			log.Fatalf("MQTT configuration error: %v", err)
+		}
+
+		if mqttConfig.Enabled && len(mqttConfig.Topics) == 0 {
+			log.Println("WARNING: mqtt_enabled=true but mqtt_topics is empty; bridge will connect but forward nothing")
+		}
+
 		// Initialize metrics
 		version := "dev"
 		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
@@ -87,7 +116,10 @@ var rootCmd = &cobra.Command{
 		}
 		m := metrics.New()
 		m.Init(version, time.Now())
-		m.SetConfigMetrics(twitchToken, discordToken, twitchChannels, discordChannels)
+		m.SetConfigMetrics([]metrics.SourceConfig{
+			{Name: "twitch", Token: twitchToken, Channels: twitchChannels},
+			{Name: "discord", Token: discordToken, Channels: discordChannels},
+		})
 		recorder := metrics.NewRecorder(m)
 
 		// Start metrics HTTP server
@@ -125,6 +157,55 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		// Start MQTT bridge after Discord (it depends on the Discord poster callback)
+		var mqttBridge *mqtt.Bridge
+		if mqttConfig.Enabled && discordRunning {
+			mqttMetrics := mqtt.NewBridgeMetrics(m.Registry)
+			postFunc := func(channelID, msg string) error {
+				return discordBot.SendMessage(channelID, msg)
+			}
+			mqttBridge = mqtt.NewBridge(mqttConfig, postFunc, mqttMetrics)
+
+			// Register the admin command handler
+			dwarfbot.RegisterMQTTHandler(func(channelName string, platform dwarfbot.ChatPlatform, arguments []string) {
+				if len(arguments) == 0 {
+					_ = platform.SendMessage(channelName, "Usage: mqtt on|off|status")
+					return
+				}
+				switch strings.ToLower(arguments[0]) {
+				case "on":
+					mqttBridge.Enable()
+					_ = platform.SendMessage(channelName, "MQTT bridge enabled")
+				case "off":
+					mqttBridge.Disable()
+					_ = platform.SendMessage(channelName, "MQTT bridge disabled")
+				case "status":
+					status := mqttBridge.Status()
+					enabledStr := "disabled"
+					if status.Enabled {
+						enabledStr = "enabled"
+					}
+					connStr := "disconnected"
+					if status.Connected {
+						connStr = "connected"
+					}
+					msg := fmt.Sprintf("MQTT bridge: %s, %s, buffer: %d, topics: %s",
+						enabledStr, connStr, status.BufferDepth, strings.Join(status.Topics, ", "))
+					_ = platform.SendMessage(channelName, msg)
+				default:
+					_ = platform.SendMessage(channelName, "Usage: mqtt on|off|status")
+				}
+			})
+
+			if err := mqttBridge.Start(); err != nil {
+				log.Printf("WARNING: Failed to start MQTT bridge: %v", err)
+			} else {
+				log.Println("MQTT bridge is running")
+			}
+		} else if mqttConfig.Enabled && !discordRunning {
+			log.Println("WARNING: MQTT bridge enabled but Discord is not running; bridge not started")
+		}
+
 		// Handle graceful shutdown via signal
 		sc := make(chan os.Signal, 1)
 		signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
@@ -160,9 +241,11 @@ var rootCmd = &cobra.Command{
 		select {
 		case <-sc:
 			log.Println("Shutting down...")
+			if mqttBridge != nil {
+				mqttBridge.Stop()
+			}
 			if twitchBot != nil {
 				twitchBot.Stop()
-				// Wait for Twitch goroutine to finish (with timeout)
 				select {
 				case <-twitchErrCh:
 				case <-time.After(5 * time.Second):
@@ -178,6 +261,9 @@ var rootCmd = &cobra.Command{
 				log.Println("Continuing with Discord only")
 				<-sc
 				log.Println("Shutting down...")
+				if mqttBridge != nil {
+					mqttBridge.Stop()
+				}
 			}
 		}
 
@@ -234,6 +320,40 @@ func init() {
 	// Metrics configuration
 	rootCmd.PersistentFlags().String("metrics-port", "8080", "Port for Prometheus metrics HTTP server")
 	cobra.CheckErr(viper.BindPFlag("metrics_port", rootCmd.PersistentFlags().Lookup("metrics-port")))
+
+	// MQTT configuration
+	rootCmd.PersistentFlags().Bool("mqtt-enabled", false, "Enable the MQTT-to-Discord bridge (off by default)")
+	cobra.CheckErr(viper.BindPFlag("mqtt_enabled", rootCmd.PersistentFlags().Lookup("mqtt-enabled")))
+
+	rootCmd.PersistentFlags().String("mqtt-broker", "", "MQTT broker URL (e.g. tcp://broker.mqtt.svc.cluster.local:1883)")
+	cobra.CheckErr(viper.BindPFlag("mqtt_broker", rootCmd.PersistentFlags().Lookup("mqtt-broker")))
+
+	rootCmd.PersistentFlags().String("mqtt-username", "", "MQTT username for authentication")
+	cobra.CheckErr(viper.BindPFlag("mqtt_username", rootCmd.PersistentFlags().Lookup("mqtt-username")))
+
+	rootCmd.PersistentFlags().String("mqtt-password", "", "MQTT password for authentication")
+	cobra.CheckErr(viper.BindPFlag("mqtt_password", rootCmd.PersistentFlags().Lookup("mqtt-password")))
+
+	rootCmd.PersistentFlags().String("mqtt-client-id", "dwarfbot", "MQTT client identifier")
+	cobra.CheckErr(viper.BindPFlag("mqtt_client_id", rootCmd.PersistentFlags().Lookup("mqtt-client-id")))
+
+	rootCmd.PersistentFlags().StringSlice("mqtt-topics", []string{}, "Comma-separated MQTT topic filters to subscribe to")
+	cobra.CheckErr(viper.BindPFlag("mqtt_topics", rootCmd.PersistentFlags().Lookup("mqtt-topics")))
+
+	rootCmd.PersistentFlags().StringSlice("mqtt-discord-channels", []string{}, "Discord channel IDs for MQTT digests (defaults to discord-channels if empty)")
+	cobra.CheckErr(viper.BindPFlag("mqtt_discord_channels", rootCmd.PersistentFlags().Lookup("mqtt-discord-channels")))
+
+	rootCmd.PersistentFlags().Int("mqtt-flush-seconds", 30, "Digest flush interval in seconds (5-86400)")
+	cobra.CheckErr(viper.BindPFlag("mqtt_flush_seconds", rootCmd.PersistentFlags().Lookup("mqtt-flush-seconds")))
+
+	rootCmd.PersistentFlags().Int("mqtt-max-buffer", 500, "Maximum buffered MQTT messages before drop-oldest")
+	cobra.CheckErr(viper.BindPFlag("mqtt_max_buffer", rootCmd.PersistentFlags().Lookup("mqtt-max-buffer")))
+
+	rootCmd.PersistentFlags().Int("mqtt-max-payload-bytes", 256, "Per-message payload truncation length")
+	cobra.CheckErr(viper.BindPFlag("mqtt_max_payload_bytes", rootCmd.PersistentFlags().Lookup("mqtt-max-payload-bytes")))
+
+	rootCmd.PersistentFlags().Int("mqtt-max-posts-per-flush", 5, "Maximum Discord messages per flush (outbound rate cap)")
+	cobra.CheckErr(viper.BindPFlag("mqtt_max_posts_per_flush", rootCmd.PersistentFlags().Lookup("mqtt-max-posts-per-flush")))
 }
 
 // initConfig reads in config file and ENV variables if set.

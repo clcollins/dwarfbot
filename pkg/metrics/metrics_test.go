@@ -102,7 +102,10 @@ func TestInit_RegistersUptimeMetric(t *testing.T) {
 
 func TestSetConfigMetrics_BothConfigured(t *testing.T) {
 	m := New()
-	m.SetConfigMetrics("twitch-tok", "discord-tok", []string{"ch1"}, []string{"ch2"})
+	m.SetConfigMetrics([]SourceConfig{
+		{Name: "twitch", Token: "twitch-tok", Channels: []string{"ch1"}},
+		{Name: "discord", Token: "discord-tok", Channels: []string{"ch2"}},
+	})
 
 	if v := testutil.ToFloat64(m.PlatformTokenPresent.WithLabelValues("twitch")); v != 1 {
 		t.Errorf("expected twitch token present=1, got %f", v)
@@ -120,7 +123,10 @@ func TestSetConfigMetrics_BothConfigured(t *testing.T) {
 
 func TestSetConfigMetrics_NeitherConfigured(t *testing.T) {
 	m := New()
-	m.SetConfigMetrics("", "", nil, nil)
+	m.SetConfigMetrics([]SourceConfig{
+		{Name: "twitch"},
+		{Name: "discord"},
+	})
 
 	if v := testutil.ToFloat64(m.PlatformTokenPresent.WithLabelValues("twitch")); v != 0 {
 		t.Errorf("expected twitch token present=0, got %f", v)
@@ -132,13 +138,30 @@ func TestSetConfigMetrics_NeitherConfigured(t *testing.T) {
 
 func TestSetConfigMetrics_TokenButNoChannels(t *testing.T) {
 	m := New()
-	m.SetConfigMetrics("tok", "", []string{}, nil)
+	m.SetConfigMetrics([]SourceConfig{
+		{Name: "twitch", Token: "tok", Channels: []string{}},
+	})
 
 	if v := testutil.ToFloat64(m.PlatformTokenPresent.WithLabelValues("twitch")); v != 1 {
 		t.Errorf("expected twitch token present=1, got %f", v)
 	}
 	if v := testutil.ToFloat64(m.PlatformConfigured.WithLabelValues("twitch")); v != 0 {
 		t.Errorf("expected twitch configured=0 (no channels), got %f", v)
+	}
+}
+
+func TestSetConfigMetrics_InitializesConnectedGauge(t *testing.T) {
+	m := New()
+	m.SetConfigMetrics([]SourceConfig{
+		{Name: "twitch", Token: "tok", Channels: []string{"ch"}},
+		{Name: "discord", Token: "tok", Channels: []string{"ch"}},
+	})
+
+	if v := testutil.ToFloat64(m.PlatformConnected.WithLabelValues("twitch")); v != 0 {
+		t.Errorf("expected twitch connected=0 initially, got %f", v)
+	}
+	if v := testutil.ToFloat64(m.PlatformConnected.WithLabelValues("discord")); v != 0 {
+		t.Errorf("expected discord connected=0 initially, got %f", v)
 	}
 }
 

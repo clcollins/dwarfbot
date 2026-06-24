@@ -273,7 +273,7 @@ func TestFlagNamingConvention(t *testing.T) {
 		"name":         true,
 		"metrics-port": true,
 	}
-	providerPrefixes := []string{"twitch-", "discord-"}
+	providerPrefixes := []string{"twitch-", "discord-", "mqtt-"}
 
 	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
 		if generalFlags[f.Name] {

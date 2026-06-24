@@ -45,6 +45,37 @@ below are the authoritative reference.
 | `discord_channels` | `--discord-channels` | `DWARFBOT_DISCORD_CHANNELS` | | Discord channel IDs to listen in |
 | `discord_admin_role` | `--discord-admin-role` | `DWARFBOT_DISCORD_ADMIN_ROLE` | `dwarfbot-admin` | Discord role name for admin commands |
 
+### MQTT Bridge Settings
+
+The MQTT bridge subscribes to an MQTT broker and forwards messages to
+Discord as batched digests. It is **off by default** and requires
+Discord to be configured. MQTT does not count as a platform for the
+"at least one platform" requirement.
+
+| Config Key | CLI Flag | Env Var | Default | Description |
+| --- | --- | --- | --- | --- |
+| `mqtt_enabled` | `--mqtt-enabled` | `DWARFBOT_MQTT_ENABLED` | `false` | Enable the MQTT-to-Discord bridge |
+| `mqtt_broker` | `--mqtt-broker` | `DWARFBOT_MQTT_BROKER` | | Broker URL (e.g. `tcp://broker:1883`) |
+| `mqtt_username` | `--mqtt-username` | `DWARFBOT_MQTT_USERNAME` | | MQTT username |
+| `mqtt_password` | `--mqtt-password` | `DWARFBOT_MQTT_PASSWORD` | | MQTT password (use secrets, never commit) |
+| `mqtt_client_id` | `--mqtt-client-id` | `DWARFBOT_MQTT_CLIENT_ID` | `dwarfbot` | MQTT client identifier |
+| `mqtt_topics` | `--mqtt-topics` | `DWARFBOT_MQTT_TOPICS` | | Comma-separated topic filters (e.g. `home/#,ai/#`) |
+| `mqtt_discord_channels` | `--mqtt-discord-channels` | `DWARFBOT_MQTT_DISCORD_CHANNELS` | *(falls back to `discord_channels`)* | Discord channel IDs for digests |
+| `mqtt_flush_seconds` | `--mqtt-flush-seconds` | `DWARFBOT_MQTT_FLUSH_SECONDS` | `30` | Digest flush interval (5–86400) |
+| `mqtt_max_buffer` | `--mqtt-max-buffer` | `DWARFBOT_MQTT_MAX_BUFFER` | `500` | Max buffered messages (drop-oldest on overflow) |
+| `mqtt_max_payload_bytes` | `--mqtt-max-payload-bytes` | `DWARFBOT_MQTT_MAX_PAYLOAD_BYTES` | `256` | Per-message payload truncation |
+| `mqtt_max_posts_per_flush` | `--mqtt-max-posts-per-flush` | `DWARFBOT_MQTT_MAX_POSTS_PER_FLUSH` | `5` | Max Discord messages per flush |
+
+The bridge can also be toggled at runtime via Discord admin commands
+(requires the `discord_admin_role`):
+
+- `!dwarfbot mqtt on` — enable forwarding
+- `!dwarfbot mqtt off` — disable forwarding
+- `!dwarfbot mqtt status` — show bridge state, buffer depth, and subscribed topics
+
+Note: `system/#` topics tend to be noisy. A good starting config is
+`home/#,ai/#`.
+
 ### Example
 
 ```sh

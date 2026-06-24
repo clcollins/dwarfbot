@@ -457,3 +457,132 @@ func TestParseAdminCommand_UnknownReturnsNilError(t *testing.T) {
 		t.Errorf("expected nil error for unknown admin command, got %v", err)
 	}
 }
+
+// --- MQTT admin command tests ---
+
+func TestParseAdminCommand_MQTT_NoHandler(t *testing.T) {
+	RegisterMQTTHandler(nil)
+	defer RegisterMQTTHandler(nil)
+
+	mock := newMockPlatform("testbot", []string{"ch1"})
+	err := parseAdminCommand(mock, "ch1", "mqtt", []string{"status"})
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+	if len(mock.messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(mock.messages))
+	}
+	if !strings.Contains(mock.messages[0].msg, "not configured") {
+		t.Errorf("expected 'not configured' message, got %q", mock.messages[0].msg)
+	}
+}
+
+func TestParseAdminCommand_MQTT_WithHandler(t *testing.T) {
+	var handlerCalled bool
+	var receivedArgs []string
+	RegisterMQTTHandler(func(channelName string, platform ChatPlatform, arguments []string) {
+		handlerCalled = true
+		receivedArgs = arguments
+	})
+	defer RegisterMQTTHandler(nil)
+
+	mock := newMockPlatform("testbot", []string{"ch1"})
+	err := parseAdminCommand(mock, "ch1", "mqtt", []string{"on"})
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+	if !handlerCalled {
+		t.Error("expected MQTT handler to be called")
+	}
+	if len(receivedArgs) != 1 || receivedArgs[0] != "on" {
+		t.Errorf("expected args [on], got %v", receivedArgs)
+	}
+}
+
+func TestParseAdminCommand_MQTT_StatusArgs(t *testing.T) {
+	var receivedArgs []string
+	RegisterMQTTHandler(func(channelName string, platform ChatPlatform, arguments []string) {
+		receivedArgs = arguments
+	})
+	defer RegisterMQTTHandler(nil)
+
+	mock := newMockPlatform("testbot", []string{"ch1"})
+	_ = parseAdminCommand(mock, "ch1", "mqtt", []string{"status"})
+	if len(receivedArgs) != 1 || receivedArgs[0] != "status" {
+		t.Errorf("expected args [status], got %v", receivedArgs)
+	}
+}
+
+func TestParseAdminCommand_MQTT_EmptyArgs(t *testing.T) {
+	var receivedArgs []string
+	RegisterMQTTHandler(func(channelName string, platform ChatPlatform, arguments []string) {
+		receivedArgs = arguments
+	})
+	defer RegisterMQTTHandler(nil)
+
+	mock := newMockPlatform("testbot", []string{"ch1"})
+	_ = parseAdminCommand(mock, "ch1", "mqtt", []string{})
+	if len(receivedArgs) != 0 {
+		t.Errorf("expected empty args, got %v", receivedArgs)
+	}
+}
+
+func TestParseCommand_AdminMQTT(t *testing.T) {
+	var handlerCalled bool
+	RegisterMQTTHandler(func(channelName string, platform ChatPlatform, arguments []string) {
+		handlerCalled = true
+	})
+	defer RegisterMQTTHandler(nil)
+
+	mock := newMockPlatformWithAdmin("testbot", []string{"ch1"}, func(ch, user string) bool {
+		return user == "admin"
+	})
+	_ = parseCommand(mock, "ch1", "admin", "mqtt", []string{"on"})
+	if !handlerCalled {
+		t.Error("expected MQTT handler to be called via parseCommand for admin")
+	}
+}
+
+func TestParseCommand_NonAdminMQTT(t *testing.T) {
+	handlerCalled := false
+	RegisterMQTTHandler(func(channelName string, platform ChatPlatform, arguments []string) {
+		handlerCalled = true
+	})
+	defer RegisterMQTTHandler(nil)
+
+	mock := newMockPlatformWithAdmin("testbot", []string{"ch1"}, func(ch, user string) bool {
+		return false
+	})
+	_ = parseCommand(mock, "ch1", "regular", "mqtt", []string{"on"})
+	if handlerCalled {
+		t.Error("expected MQTT handler NOT to be called for non-admin")
+	}
+}
+
+func TestRegisterMQTTHandler_GetMQTTHandler(t *testing.T) {
+	RegisterMQTTHandler(nil)
+	if h := getMQTTHandler(); h != nil {
+		t.Error("expected nil handler after registering nil")
+	}
+
+	called := false
+	RegisterMQTTHandler(func(channelName string, platform ChatPlatform, arguments []string) {
+		called = true
+	})
+	defer RegisterMQTTHandler(nil)
+
+	h := getMQTTHandler()
+	if h == nil {
+		t.Fatal("expected non-nil handler")
+	}
+	h("ch", nil, nil)
+	if !called {
+		t.Error("expected handler to be called")
+	}
+}
+
+func TestNormalizeCommandLabel_MQTT(t *testing.T) {
+	if got := normalizeCommandLabel("mqtt"); got != "mqtt" {
+		t.Errorf("expected 'mqtt', got %q", got)
+	}
+}

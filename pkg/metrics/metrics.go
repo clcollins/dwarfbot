@@ -147,25 +147,26 @@ func (m *Metrics) Init(version string, startTime time.Time) {
 	))
 }
 
-// SetConfigMetrics reports which platforms have tokens and are fully configured.
-func (m *Metrics) SetConfigMetrics(twitchToken, discordToken string, twitchChannels, discordChannels []string) {
-	setPresent := func(platform, token string, channels []string) {
-		if token != "" {
-			m.PlatformTokenPresent.WithLabelValues(platform).Set(1)
-		} else {
-			m.PlatformTokenPresent.WithLabelValues(platform).Set(0)
-		}
-		if token != "" && len(channels) > 0 {
-			m.PlatformConfigured.WithLabelValues(platform).Set(1)
-		} else {
-			m.PlatformConfigured.WithLabelValues(platform).Set(0)
-		}
-	}
-	setPresent("twitch", twitchToken, twitchChannels)
-	setPresent("discord", discordToken, discordChannels)
+// SourceConfig describes a platform or source for config metrics reporting.
+type SourceConfig struct {
+	Name     string
+	Token    string
+	Channels []string
+}
 
-	// Initialize connected gauge to 0 so alerting rules work even
-	// if a platform never connects.
-	m.PlatformConnected.WithLabelValues("twitch").Set(0)
-	m.PlatformConnected.WithLabelValues("discord").Set(0)
+// SetConfigMetrics reports which platforms/sources have tokens and are fully configured.
+func (m *Metrics) SetConfigMetrics(sources []SourceConfig) {
+	for _, src := range sources {
+		if src.Token != "" {
+			m.PlatformTokenPresent.WithLabelValues(src.Name).Set(1)
+		} else {
+			m.PlatformTokenPresent.WithLabelValues(src.Name).Set(0)
+		}
+		if src.Token != "" && len(src.Channels) > 0 {
+			m.PlatformConfigured.WithLabelValues(src.Name).Set(1)
+		} else {
+			m.PlatformConfigured.WithLabelValues(src.Name).Set(0)
+		}
+		m.PlatformConnected.WithLabelValues(src.Name).Set(0)
+	}
 }

@@ -29,7 +29,27 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"sync"
 )
+
+type MQTTHandlerFunc func(channelName string, platform ChatPlatform, arguments []string)
+
+var (
+	mqttHandler   MQTTHandlerFunc
+	mqttHandlerMu sync.RWMutex
+)
+
+func RegisterMQTTHandler(handler MQTTHandlerFunc) {
+	mqttHandlerMu.Lock()
+	defer mqttHandlerMu.Unlock()
+	mqttHandler = handler
+}
+
+func getMQTTHandler() MQTTHandlerFunc {
+	mqttHandlerMu.RLock()
+	defer mqttHandlerMu.RUnlock()
+	return mqttHandler
+}
 
 func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, arguments []string) error {
 	switch cmd {
@@ -38,6 +58,14 @@ func parseAdminCommand(platform ChatPlatform, channelName string, cmd string, ar
 			log.Printf("failed to send shutdown message to channel %s: %v", channelName, err)
 		}
 		platform.Shutdown(0)
+		return nil
+	case "mqtt":
+		handler := getMQTTHandler()
+		if handler == nil {
+			_ = platform.SendMessage(channelName, "MQTT bridge is not configured")
+			return nil
+		}
+		handler(channelName, platform, arguments)
 		return nil
 	}
 	return nil
@@ -118,6 +146,7 @@ var knownCommands = map[string]bool{
 	"ping":     true,
 	"channels": true,
 	"shutdown": true,
+	"mqtt":     true,
 }
 
 func normalizeCommandLabel(cmd string) string {

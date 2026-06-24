@@ -92,12 +92,6 @@ func mockFactory(client *mockClient) ClientFactory {
 	}
 }
 
-func mockFactoryWithErr(err error) ClientFactory {
-	return func(cfg Config, onConnLost pahomqtt.ConnectionLostHandler, onConnect pahomqtt.OnConnectHandler) MQTTClient {
-		return newMockClient(err)
-	}
-}
-
 var _ MQTTClient = (*mockClient)(nil)
 var _ pahomqtt.Message = (*mockMessage)(nil)
 

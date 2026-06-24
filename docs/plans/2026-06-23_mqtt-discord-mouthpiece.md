@@ -10,6 +10,7 @@
 This plan adds an MQTT subscriber bridge to dwarfbot that forwards messages from a Mosquitto broker to Discord as batched digests. The feature is off by default, uses operator-configurable topic filters, and enforces rate caps and buffer limits to prevent Discord rate-limiting.
 
 Key design decisions:
+
 - MQTT is an input source, NOT a chat platform -- it does not satisfy the "at least one platform" requirement
 - Discord fan-out via injected callback (`func(channelID, msg string) error`) -- no circular import between `pkg/mqtt` and `pkg/dwarfbot`
 - Drop-oldest buffer policy for live debug view (keep most recent messages)
@@ -23,6 +24,7 @@ Key design decisions:
 ### New package: `pkg/mqtt`
 
 Files:
+
 - `bridge.go` -- Bridge struct, NewBridge, Start/Stop, Enable/Disable/Status, flush loop, reconnect loop, MQTT message handler
 - `buffer.go` -- Bounded ring buffer with drop-oldest, Message type, TruncatePayload
 - `config.go` -- Config struct, ValidateConfig
@@ -95,6 +97,7 @@ MQTT-specific metrics (buffer depth, dropped, suppressed, bridge enabled, mqtt c
 ### Addendum 17 -- Bridge self-heals on failure (MC review of Rev 2, Note 3)
 
 When the MQTT bridge loses its broker connection:
+
 1. Log the error
 2. Post to Discord (via the poster callback) that the bridge has gone down
 3. Attempt to reconnect with sequential backoff (5s x attempt, up to 10 attempts)
@@ -105,4 +108,4 @@ The bridge never triggers a dwarfbot shutdown. There is no `mqttErrCh` in the `r
 
 ## Lessons Learned
 
-*(To be updated after implementation review and CI feedback.)*
+To be updated after implementation review and CI feedback.

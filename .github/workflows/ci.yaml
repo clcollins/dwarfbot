@@ -289,10 +289,21 @@ jobs:
         run: |
           echo "Checking OCI labels..."
           podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.title"}}' | grep -q "dwarfbot"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.description"}}' | grep -q "."
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.url"}}' | grep -q "github.com/clcollins/dwarfbot"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.source"}}' | grep -q "github.com/clcollins/dwarfbot"
           podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' | grep -q "$(git rev-parse HEAD)"
           podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.version"}}' | grep -q "ci"
-          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "is.collins.cluster.build.commit.id"}}' | grep -q "$(git rev-parse HEAD)"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.created"}}' | grep -q "."
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.vendor"}}' | grep -q "clcollins"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}' | grep -q "MIT"
           podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "io.k8s.display-name"}}' | grep -q "dwarfbot"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "io.k8s.description"}}' | grep -q "."
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "is.collins.cluster.image.revision"}}' | grep -q "$(git rev-parse HEAD)"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "is.collins.cluster.image.version"}}' | grep -q "ci"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "is.collins.cluster.image.created"}}' | grep -q "."
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "is.collins.cluster.build.commit.id"}}' | grep -q "$(git rev-parse HEAD)"
+          podman inspect ${{ env.IMAGE_NAME }}:ci --format '{{index .Config.Labels "is.collins.cluster.build.date"}}' | grep -q "."
           echo "All OCI labels validated successfully."
       - name: Validate image runs
         run: podman run --rm ${{ env.IMAGE_NAME }}:ci --help

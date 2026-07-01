@@ -95,6 +95,31 @@ func mockFactory(client *mockClient) ClientFactory {
 var _ MQTTClient = (*mockClient)(nil)
 var _ pahomqtt.Message = (*mockMessage)(nil)
 
+type countingFactory struct {
+	client *mockClient
+	mu     sync.Mutex
+	calls  int
+}
+
+func newCountingFactory(client *mockClient) *countingFactory {
+	return &countingFactory{client: client}
+}
+
+func (f *countingFactory) factory() ClientFactory {
+	return func(cfg Config, onConnLost pahomqtt.ConnectionLostHandler, onConnect pahomqtt.OnConnectHandler) MQTTClient {
+		f.mu.Lock()
+		f.calls++
+		f.mu.Unlock()
+		return f.client
+	}
+}
+
+func (f *countingFactory) getCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
 type messageCollector struct {
 	mu       sync.Mutex
 	messages []struct{ channel, msg string }

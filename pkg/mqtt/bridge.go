@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -19,17 +20,20 @@ type BridgeStatus struct {
 }
 
 type Bridge struct {
-	config        Config
-	buffer        *Buffer
-	metrics       *BridgeMetrics
-	postFunc      PostFunc
-	clientFactory ClientFactory
-	client        MQTTClient
-	mu            sync.Mutex
-	enabled       bool
-	connected     bool
-	stopCh        chan struct{}
-	stopped       bool
+	config         Config
+	buffer         *Buffer
+	metrics        *BridgeMetrics
+	postFunc       PostFunc
+	clientFactory  ClientFactory
+	client         MQTTClient
+	mu             sync.Mutex
+	enabled        bool
+	connected      bool
+	stopCh         chan struct{}
+	stopped        bool
+	reconnecting   bool
+	lastNotifyTime time.Time
+	nowFunc        func() time.Time
 }
 
 func NewBridge(cfg Config, postFunc PostFunc, metrics *BridgeMetrics) *Bridge {
@@ -40,6 +44,7 @@ func NewBridge(cfg Config, postFunc PostFunc, metrics *BridgeMetrics) *Bridge {
 		postFunc:      postFunc,
 		clientFactory: DefaultClientFactory,
 		enabled:       cfg.Enabled,
+		nowFunc:       time.Now,
 	}
 }
 
@@ -51,6 +56,7 @@ func NewBridgeWithFactory(cfg Config, postFunc PostFunc, metrics *BridgeMetrics,
 		postFunc:      postFunc,
 		clientFactory: factory,
 		enabled:       cfg.Enabled,
+		nowFunc:       time.Now,
 	}
 }
 
@@ -65,7 +71,7 @@ func (b *Bridge) Start() error {
 
 	if err := b.connect(); err != nil {
 		log.Printf("MQTT bridge: initial connection failed: %v", err)
-		b.notifyDiscord(fmt.Sprintf("MQTT bridge failed to connect: %v — will retry", err))
+		b.notifyDiscordThrottled(fmt.Sprintf("MQTT bridge failed to connect: %v — will retry", err))
 		go b.reconnectLoop()
 	}
 
@@ -81,10 +87,11 @@ func (b *Bridge) Stop() {
 	}
 	b.stopped = true
 	close(b.stopCh)
+	client := b.client
 	b.mu.Unlock()
 
-	if b.client != nil && b.client.IsConnected() {
-		b.client.Disconnect(250)
+	if client != nil && client.IsConnected() {
+		client.Disconnect(250)
 	}
 
 	b.mu.Lock()
@@ -98,8 +105,14 @@ func (b *Bridge) Stop() {
 }
 
 func (b *Bridge) connect() error {
-	b.client = b.clientFactory(b.config, b.onConnectionLost, b.onConnect)
-	token := b.client.Connect()
+	b.mu.Lock()
+	if b.client == nil {
+		b.client = b.clientFactory(b.config, b.onConnectionLost, b.onConnect)
+	}
+	client := b.client
+	b.mu.Unlock()
+
+	token := client.Connect()
 	token.Wait()
 	if err := token.Error(); err != nil {
 		return fmt.Errorf("MQTT connect: %w", err)
@@ -112,21 +125,33 @@ func (b *Bridge) connect() error {
 	}
 	b.mu.Unlock()
 
-	b.subscribe()
+	if err := b.subscribe(); err != nil {
+		return fmt.Errorf("MQTT subscribe: %w", err)
+	}
 	log.Printf("MQTT bridge connected to %s", b.config.Broker)
 	return nil
 }
 
-func (b *Bridge) subscribe() {
+func (b *Bridge) subscribe() error {
+	b.mu.Lock()
+	client := b.client
+	b.mu.Unlock()
+	if client == nil {
+		return fmt.Errorf("no MQTT client")
+	}
+
+	var errs []error
 	for _, topic := range b.config.Topics {
-		token := b.client.Subscribe(topic, 0, b.messageHandler)
+		token := client.Subscribe(topic, 0, b.messageHandler)
 		token.Wait()
 		if err := token.Error(); err != nil {
 			log.Printf("MQTT bridge: failed to subscribe to %s: %v", topic, err)
+			errs = append(errs, fmt.Errorf("topic %s: %w", topic, err))
 		} else {
 			log.Printf("MQTT bridge: subscribed to %s", topic)
 		}
 	}
+	return errors.Join(errs...)
 }
 
 func (b *Bridge) messageHandler(_ pahomqtt.Client, msg pahomqtt.Message) {
@@ -158,7 +183,7 @@ func (b *Bridge) onConnectionLost(_ pahomqtt.Client, err error) {
 	b.mu.Unlock()
 
 	if !stopped {
-		b.notifyDiscord(fmt.Sprintf("MQTT bridge connection lost: %v — will reconnect", err))
+		b.notifyDiscordThrottled(fmt.Sprintf("MQTT bridge connection lost: %v — will reconnect", err))
 		go b.reconnectLoop()
 	}
 }
@@ -171,11 +196,26 @@ func (b *Bridge) onConnect(_ pahomqtt.Client) {
 	}
 	b.mu.Unlock()
 
-	b.subscribe()
+	if err := b.subscribe(); err != nil {
+		log.Printf("MQTT bridge: resubscribe after reconnect failed: %v", err)
+	}
 	log.Println("MQTT bridge: reconnected")
 }
 
 func (b *Bridge) reconnectLoop() {
+	b.mu.Lock()
+	if b.reconnecting {
+		b.mu.Unlock()
+		return
+	}
+	b.reconnecting = true
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		b.reconnecting = false
+		b.mu.Unlock()
+	}()
+
 	maxRetries := 10
 	for attempt := range maxRetries {
 		b.mu.Lock()
@@ -250,6 +290,25 @@ func (b *Bridge) flush() {
 	if b.metrics != nil {
 		b.metrics.RecordForwarded(forwarded)
 	}
+}
+
+const notifyCooldown = 5 * time.Minute
+
+func (b *Bridge) notifyDiscordThrottled(msg string) {
+	b.mu.Lock()
+	now := b.nowFunc()
+	if !b.lastNotifyTime.IsZero() && now.Sub(b.lastNotifyTime) < notifyCooldown {
+		b.mu.Unlock()
+		log.Printf("MQTT bridge: suppressing Discord notification (cooldown): %s", msg)
+		if b.metrics != nil {
+			b.metrics.RecordSuppressed(1)
+		}
+		return
+	}
+	b.lastNotifyTime = now
+	b.mu.Unlock()
+
+	b.notifyDiscord(msg)
 }
 
 func (b *Bridge) notifyDiscord(msg string) {

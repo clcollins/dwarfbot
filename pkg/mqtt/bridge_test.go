@@ -828,6 +828,75 @@ func TestBridge_NotifyDiscord_PostsToAllChannels(t *testing.T) {
 	}
 }
 
+func TestBridge_NotifyDiscordThrottled_FirstCallSends(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	b.nowFunc = func() time.Time { return now }
+
+	b.notifyDiscordThrottled("first alert")
+
+	msgs := collector.getMessages()
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+}
+
+func TestBridge_NotifyDiscordThrottled_WithinCooldownSuppressed(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	b.nowFunc = func() time.Time { return now }
+
+	b.notifyDiscordThrottled("first alert")
+	b.notifyDiscordThrottled("second alert")
+	b.notifyDiscordThrottled("third alert")
+
+	msgs := collector.getMessages()
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message (others suppressed), got %d", len(msgs))
+	}
+}
+
+func TestBridge_NotifyDiscordThrottled_AfterCooldownSendsAgain(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	b.nowFunc = func() time.Time { return now }
+	b.notifyDiscordThrottled("first alert")
+
+	now = now.Add(6 * time.Minute)
+	b.notifyDiscordThrottled("second alert after cooldown")
+
+	msgs := collector.getMessages()
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages (cooldown expired), got %d", len(msgs))
+	}
+}
+
+func TestBridge_NotifyDiscord_ExhaustedRetries_NotThrottled(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	b.nowFunc = func() time.Time { return now }
+
+	b.notifyDiscordThrottled("connection lost")
+	b.notifyDiscord("exhausted reconnect attempts — bridge is offline")
+
+	msgs := collector.getMessages()
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages (un-throttled notifyDiscord bypasses cooldown), got %d", len(msgs))
+	}
+}
+
 func TestBridge_OnConnectionLost_SetsDisconnected(t *testing.T) {
 	client := newMockClient(nil)
 	collector := &messageCollector{}
@@ -900,7 +969,9 @@ func TestBridge_Subscribe_RecordsTopics(t *testing.T) {
 	b, _ := newTestBridge(t, client, collector)
 	b.client = client
 
-	b.subscribe()
+	if err := b.subscribe(); err != nil {
+		t.Fatalf("unexpected subscribe error: %v", err)
+	}
 
 	subs := client.getSubscriptions()
 	if len(subs) != 2 {
@@ -915,7 +986,104 @@ func TestBridge_Subscribe_HandleError(t *testing.T) {
 	b, _ := newTestBridge(t, client, collector)
 	b.client = client
 
-	b.subscribe()
+	err := b.subscribe()
+	if err == nil {
+		t.Fatal("expected error from subscribe with failing topic")
+	}
+}
+
+func TestBridge_ReconnectLoop_NoDuplicateGoroutines(t *testing.T) {
+	client := newMockClient(fmt.Errorf("connection refused"))
+	collector := &messageCollector{}
+	cf := newCountingFactory(client)
+	reg := prometheus.NewRegistry()
+	m := NewBridgeMetrics(reg)
+	cfg := Config{
+		Enabled:          true,
+		Broker:           "tcp://test:1883",
+		Topics:           []string{"home/#"},
+		MaxBuffer:        10,
+		MaxPayloadBytes:  128,
+		MaxPostsPerFlush: 3,
+		FlushSeconds:     60,
+		DiscordChannels:  []string{"ch1"},
+	}
+	b := NewBridgeWithFactory(cfg, collector.post, m, cf.factory())
+	b.stopCh = make(chan struct{})
+
+	go b.reconnectLoop()
+	time.Sleep(20 * time.Millisecond)
+
+	b.mu.Lock()
+	isReconnecting := b.reconnecting
+	b.mu.Unlock()
+	if !isReconnecting {
+		t.Fatal("expected reconnecting to be true while reconnectLoop is running")
+	}
+
+	b.reconnectLoop()
+
+	callsAfterSecond := cf.getCalls()
+	if callsAfterSecond != 0 {
+		t.Fatalf("second reconnectLoop should have returned immediately, but factory was called %d times", callsAfterSecond)
+	}
+
+	close(b.stopCh)
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestBridge_ReconnectLoop_ResetsAfterCompletion(t *testing.T) {
+	client := newMockClient(nil)
+	collector := &messageCollector{}
+	b, _ := newTestBridge(t, client, collector)
+
+	b.mu.Lock()
+	b.stopCh = make(chan struct{})
+	b.stopped = false
+	b.mu.Unlock()
+
+	b.reconnectLoop()
+
+	b.mu.Lock()
+	isReconnecting := b.reconnecting
+	b.mu.Unlock()
+	if isReconnecting {
+		t.Fatal("expected reconnecting to be false after reconnectLoop completes")
+	}
+}
+
+func TestBridge_Connect_ReusesClient(t *testing.T) {
+	client := newMockClient(nil)
+	cf := newCountingFactory(client)
+	collector := &messageCollector{}
+	reg := prometheus.NewRegistry()
+	m := NewBridgeMetrics(reg)
+	cfg := Config{
+		Enabled:          true,
+		Broker:           "tcp://test:1883",
+		Topics:           []string{"home/#"},
+		MaxBuffer:        10,
+		MaxPayloadBytes:  128,
+		MaxPostsPerFlush: 3,
+		FlushSeconds:     5,
+		DiscordChannels:  []string{"ch1"},
+	}
+	b := NewBridgeWithFactory(cfg, collector.post, m, cf.factory())
+
+	if err := b.connect(); err != nil {
+		t.Fatalf("first connect failed: %v", err)
+	}
+	if cf.getCalls() != 1 {
+		t.Fatalf("expected 1 factory call after first connect, got %d", cf.getCalls())
+	}
+
+	client.Disconnect(0)
+	if err := b.connect(); err != nil {
+		t.Fatalf("second connect failed: %v", err)
+	}
+	if cf.getCalls() != 1 {
+		t.Fatalf("expected factory call count to remain 1 after reconnect, got %d", cf.getCalls())
+	}
 }
 
 func TestNewBridgeWithFactory_UsesCustomFactory(t *testing.T) {

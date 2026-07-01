@@ -17,7 +17,7 @@ func DefaultClientFactory(cfg Config, onConnLost pahomqtt.ConnectionLostHandler,
 	opts := pahomqtt.NewClientOptions().
 		AddBroker(cfg.Broker).
 		SetClientID(cfg.ClientID).
-		SetAutoReconnect(true).
+		SetAutoReconnect(false).
 		SetConnectionLostHandler(onConnLost).
 		SetOnConnectHandler(onConnect)
 

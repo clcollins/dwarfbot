@@ -108,4 +108,32 @@ The bridge never triggers a dwarfbot shutdown. There is no `mqttErrCh` in the `r
 
 ## Lessons Learned
 
-To be updated after implementation review and CI feedback.
+Updated 2026-07-01 after production deployment revealed a reconnection storm and Discord notification flood (PR #17, PR #18).
+
+### Bug 1: Dual competing reconnection mechanisms
+
+Paho's `SetAutoReconnect(true)` and the bridge's own `reconnectLoop()` both fired on connection loss. Each created connections with the same ClientID, causing Mosquitto to kill the older connection — which triggered another `onConnectionLost`, creating an infinite cascade. **Lesson:** When implementing your own reconnection logic with backoff, always disable the library's built-in auto-reconnect. Two reconnect paths with the same ClientID will fight.
+
+### Bug 2: New client created on every reconnect
+
+`connect()` called the client factory every time, creating a fresh paho client without disconnecting the old one. The dereferenced client kept its connection alive, so two clients with the same ClientID existed simultaneously. **Lesson:** Reuse the existing client object for reconnection — paho's `Connect()` works on a disconnected client. Only create the client once.
+
+### Bug 3: No guard against duplicate reconnectLoop goroutines
+
+`onConnectionLost` spawned `go reconnectLoop()` unconditionally. Multiple concurrent loops amplified the ClientID collision problem. **Lesson:** Any callback that spawns a goroutine needs a guard to prevent duplicates, especially callbacks that can fire rapidly (like connection-lost handlers).
+
+### Bug 4: Discord notification spam
+
+`notifyDiscord()` was called from `onConnectionLost` with no rate limiting. In the reconnect storm this fired dozens of times per second. **Lesson:** Any notification path reachable from a retry loop or error callback needs throttling. A 5-minute cooldown with an injectable clock (`nowFunc`) for testability is the right pattern.
+
+### Bug 5: b.client field unprotected by mutex
+
+`b.client` was read and written from multiple goroutines (`connect()`, `Stop()`, `subscribe()`) without mutex protection. **Lesson:** Any field accessed from callbacks, goroutines, and the main path needs synchronization. Use minimal lock scope — snapshot the reference under the lock, then use the local copy for blocking I/O.
+
+### Bug 6: subscribe() errors silently ignored
+
+`subscribe()` logged errors but returned nothing. The bridge could report "connected" while having no active subscriptions. **Lesson:** Internal methods that can fail should return errors so callers can react. Silent logging is not error handling.
+
+### Bug 7: Viper GetStringSlice does not split env var commas
+
+`viper.GetStringSlice("mqtt_topics")` with env var `DWARFBOT_MQTT_TOPICS=home/#,ai/#,system/#` treated the entire value as one string. Mosquitto rejected the invalid topic filter containing commas, causing immediate EOF disconnection. This is a well-known Viper limitation. **Lesson:** When using Viper with env vars for string slices, add a wrapper that detects single-element slices containing commas and splits them. This affected all four `StringSlice` config keys (twitch channels, discord channels, mqtt topics, mqtt discord channels).

@@ -243,6 +243,61 @@ func TestInitConfig_DiscordEnvVars(t *testing.T) {
 	}
 }
 
+// --- getStringSlice tests ---
+
+func TestGetStringSlice_CommaSeparatedEnvVar(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DWARFBOT_MQTT_TOPICS", "home/#,ai/#,system/#")
+	savedCfgFile := cfgFile
+	cfgFile = ""
+	defer func() { cfgFile = savedCfgFile }()
+
+	viper.Reset()
+	initConfig()
+
+	got := getStringSlice("mqtt_topics")
+	if len(got) != 3 {
+		t.Fatalf("expected 3 topics, got %d: %v", len(got), got)
+	}
+	if got[0] != "home/#" || got[1] != "ai/#" || got[2] != "system/#" {
+		t.Errorf("expected [home/# ai/# system/#], got %v", got)
+	}
+}
+
+func TestGetStringSlice_SingleValue(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DWARFBOT_TWITCH_CHANNELS", "hammerdwarf")
+	savedCfgFile := cfgFile
+	cfgFile = ""
+	defer func() { cfgFile = savedCfgFile }()
+
+	viper.Reset()
+	initConfig()
+
+	got := getStringSlice("twitch_channels")
+	if len(got) != 1 {
+		t.Fatalf("expected 1 channel, got %d: %v", len(got), got)
+	}
+	if got[0] != "hammerdwarf" {
+		t.Errorf("expected [hammerdwarf], got %v", got)
+	}
+}
+
+func TestGetStringSlice_EmptyValue(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	savedCfgFile := cfgFile
+	cfgFile = ""
+	defer func() { cfgFile = savedCfgFile }()
+
+	viper.Reset()
+	initConfig()
+
+	got := getStringSlice("mqtt_topics")
+	if len(got) != 0 {
+		t.Fatalf("expected 0 topics for unset key, got %d: %v", len(got), got)
+	}
+}
+
 // --- Flag usage/help text tests ---
 
 func TestFlagsHaveUsageText(t *testing.T) {

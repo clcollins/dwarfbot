@@ -66,13 +66,13 @@ var rootCmd = &cobra.Command{
 
 		// Twitch config
 		twitchToken := viper.GetString("twitch_token")
-		twitchChannels := viper.GetStringSlice("twitch_channels")
+		twitchChannels := getStringSlice("twitch_channels")
 		server := viper.GetString("twitch_server")
 		port := viper.GetString("twitch_port")
 
 		// Discord config
 		discordToken := viper.GetString("discord_token")
-		discordChannels := viper.GetStringSlice("discord_channels")
+		discordChannels := getStringSlice("discord_channels")
 		discordAdminRole := viper.GetString("discord_admin_role")
 
 		twitchEnabled := twitchToken != "" && len(twitchChannels) > 0
@@ -83,7 +83,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// MQTT config
-		mqttDiscordChannels := viper.GetStringSlice("mqtt_discord_channels")
+		mqttDiscordChannels := getStringSlice("mqtt_discord_channels")
 		if len(mqttDiscordChannels) == 0 {
 			mqttDiscordChannels = discordChannels
 		}
@@ -93,7 +93,7 @@ var rootCmd = &cobra.Command{
 			Username:         viper.GetString("mqtt_username"),
 			Password:         viper.GetString("mqtt_password"),
 			ClientID:         viper.GetString("mqtt_client_id"),
-			Topics:           viper.GetStringSlice("mqtt_topics"),
+			Topics:           getStringSlice("mqtt_topics"),
 			DiscordChannels:  mqttDiscordChannels,
 			FlushSeconds:     viper.GetInt("mqtt_flush_seconds"),
 			MaxBuffer:        viper.GetInt("mqtt_max_buffer"),
@@ -354,6 +354,20 @@ func init() {
 
 	rootCmd.PersistentFlags().Int("mqtt-max-posts-per-flush", 5, "Maximum Discord messages per flush (outbound rate cap)")
 	cobra.CheckErr(viper.BindPFlag("mqtt_max_posts_per_flush", rootCmd.PersistentFlags().Lookup("mqtt-max-posts-per-flush")))
+}
+
+func getStringSlice(key string) []string {
+	v := viper.GetStringSlice(key)
+	if len(v) == 1 && strings.Contains(v[0], ",") {
+		var out []string
+		for _, s := range strings.Split(v[0], ",") {
+			if t := strings.TrimSpace(s); t != "" {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	return v
 }
 
 // initConfig reads in config file and ENV variables if set.
